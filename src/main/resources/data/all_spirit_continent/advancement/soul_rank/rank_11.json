@@ -1,0 +1,33 @@
+{
+  "parent": "all_spirit_continent:soul_rank/rank_10",
+  "criteria": {
+    "requirement": {
+      "trigger": "minecraft:impossible"
+    }
+  },
+  "display": {
+    "announce_to_chat": true,
+    "description": {
+      "translate": "advancement.all_spirit_continent.rank_11.description"
+    },
+    "frame": "goal",
+    "icon": {
+      "count": 1,
+      "id": "all_spirit_continent:soul_ring",
+      "components": {
+        "minecraft:custom_data": {
+          "SoulRingAge": 1000000
+        }
+      }
+    },
+    "show_toast": true,
+    "title": {
+      "translate": "advancement.all_spirit_continent.rank_11.title"
+    }
+  },
+  "requirements": [
+    [
+      "requirement"
+    ]
+  ]
+}

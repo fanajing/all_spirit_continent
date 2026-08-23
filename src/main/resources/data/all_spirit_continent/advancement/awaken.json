@@ -1,0 +1,34 @@
+{
+  "parent": "all_spirit_continent:root",
+  "criteria": {
+    "has_crystal": {
+      "trigger": "minecraft:inventory_changed",
+      "conditions": {
+        "items": [
+          {
+            "items": "all_spirit_continent:shuijingqiu"
+          }
+        ]
+      }
+    }
+  },
+  "display": {
+    "announce_to_chat": true,
+    "description": {
+      "translate": "advancement.all_spirit_continent.awaken.description"
+    },
+    "icon": {
+      "count": 1,
+      "id": "all_spirit_continent:shuijingqiu"
+    },
+    "show_toast": true,
+    "title": {
+      "translate": "advancement.all_spirit_continent.awaken.title"
+    }
+  },
+  "requirements": [
+    [
+      "has_crystal"
+    ]
+  ]
+}

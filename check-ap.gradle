@@ -1,0 +1,19 @@
+// 临时脚本：打印 compileJava 的注解处理器与编译器参数（诊断 mixin refmap 生成）
+gradle.afterProject { p ->
+    p.afterEvaluate {
+        def t = p.tasks.findByName('compileJava')
+        if (t == null) return
+        t.doFirst {
+            println "=== AP PATH ==="
+            try {
+                t.options.annotationProcessorPath.files.each { println it }
+            } catch (Throwable e) {
+                println "AP path unavailable: " + e
+            }
+            println "=== COMPILER ARGS ==="
+            t.options.compilerArgs.each { println it }
+            println "=== COMPILER ARG PROVIDERS ==="
+            t.options.compilerArgumentProviders.each { println it.class.name }
+        }
+    }
+}

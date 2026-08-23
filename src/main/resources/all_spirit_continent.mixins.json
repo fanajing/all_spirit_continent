@@ -1,0 +1,16 @@
+{
+    "required": true,
+    "minVersion": "0.8.5",
+    "package": "org.fanajing.all_spirit_continent.mixin",
+    "compatibilityLevel": "JAVA_21",
+    "mixins": [
+        "AttributesMixin",
+        "RangedAttributeMixin"
+    ],
+    "client": [
+        "client.EntityRendererMixin"
+    ],
+    "injectors": {
+        "defaultRequire": 1
+    }
+}

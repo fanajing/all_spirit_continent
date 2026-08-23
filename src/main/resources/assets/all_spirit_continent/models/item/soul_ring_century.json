@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/generated",
+  "textures": {
+    "layer0": "all_spirit_continent:item/soul_ring_century"
+  }
+}

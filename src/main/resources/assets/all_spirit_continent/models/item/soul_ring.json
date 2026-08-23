@@ -1,0 +1,13 @@
+{
+  "parent": "minecraft:item/generated",
+  "textures": {
+    "layer0": "all_spirit_continent:item/soul_ring_decade"
+  },
+  "overrides": [
+    { "predicate": { "all_spirit_continent:ring_tier": 1.0 }, "model": "all_spirit_continent:item/soul_ring_century" },
+    { "predicate": { "all_spirit_continent:ring_tier": 2.0 }, "model": "all_spirit_continent:item/soul_ring_millennium" },
+    { "predicate": { "all_spirit_continent:ring_tier": 3.0 }, "model": "all_spirit_continent:item/soul_ring_decamillennium" },
+    { "predicate": { "all_spirit_continent:ring_tier": 4.0 }, "model": "all_spirit_continent:item/soul_ring_centimillennium" },
+    { "predicate": { "all_spirit_continent:ring_tier": 5.0 }, "model": "all_spirit_continent:item/soul_ring_megennium" }
+  ]
+}

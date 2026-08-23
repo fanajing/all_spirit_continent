@@ -1,0 +1,17 @@
+# ===== Gradle / NeoForge 构建产物 =====
+.gradle/
+build/
+out/
+classes/
+
+# ===== Minecraft 运行目录（游戏存档/缓存，勿提交）=====
+run/
+
+# ===== IDE 配置 =====
+.idea/
+.vscode/
+*.iml
+
+# ===== 临时/日志文件 =====
+tmp_ap_check.txt
+*.log

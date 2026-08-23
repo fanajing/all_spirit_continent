@@ -1,0 +1,27 @@
+{
+  "parent": "all_spirit_continent:root",
+  "criteria": {
+    "requirement": {
+      "trigger": "minecraft:impossible"
+    }
+  },
+  "display": {
+    "announce_to_chat": true,
+    "description": {
+      "translate": "advancement.all_spirit_continent.rank_1.description"
+    },
+    "icon": {
+      "count": 1,
+      "id": "all_spirit_continent:shuijingqiu"
+    },
+    "show_toast": true,
+    "title": {
+      "translate": "advancement.all_spirit_continent.rank_1.title"
+    }
+  },
+  "requirements": [
+    [
+      "requirement"
+    ]
+  ]
+}

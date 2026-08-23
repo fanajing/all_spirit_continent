@@ -1,0 +1,343 @@
+斗罗大陆模组 - 魂技动态生成与社区共享系统 需求文档 (V6.0)
+
+文档版本：6.0
+更新日期：2026-08-23
+核心更新：优化评分交互流程——评分与吸收确认界面合并；指令评分改用“第几魂环”定位替代UUID。
+
+---
+
+1. 项目背景与目标
+
+1.1 核心痛点
+
+· 组合爆炸：随着模组内武魂与魂兽数量增加，手动编写魂技的工作量呈指数级增长。
+· 外部模组兼容：玩家安装其他模组时，原版预设无法覆盖新增生物。
+· 服务器成本：中心化AI接口随玩家增多费用极高。
+· 数据污染风险：社区共享模式下，恶意或劣质魂技可能上传污染公共库。
+· 审核压力：作者无法在游戏内逐条审核所有上传内容，需依靠社区自治+外部工具辅助。
+
+1.2 核心目标
+
+构建一套 “众包式、双阵营、带熔断机制的AI魂技生成系统” ，并配套 “社区评分 + 算法分流 + 外部审核” 的质量过滤体系。作者审核工作通过独立的EXE程序完成，不写入模组代码。
+
+---
+
+2. 核心设计理念（双阵营隔离）
+
+阵营 默认状态 生成源 上传策略 下载策略
+共享阵营 默认开启 强制优先用作者API，耗尽则降级玩家Key 强制上传 强制下载
+独狼阵营 指令切换 严格禁止作者API，必须绑定私人Key 可选（默认关） 可选（默认关）
+
+---
+
+3. 可执行技能动作架构（不变）
+
+AI输出标准动作序列，模组内置执行引擎解析。
+
+一、控制系（Control）—— 限制、削弱、干扰
+
+原语类型 功能 必填参数 可选参数
+BIND 束缚（禁锢移动） duration (秒) target (SELF/TARGET), radius (float) 
+SILENCE 沉默（禁止使用技能） duration (秒) target (SELF/TARGET), radius (float) 
+BLIND 致盲（视野遮蔽） duration (秒) target (SELF/TARGET), radius (float) 
+ROOT 定身（完全无法行动） duration (秒) target (SELF/TARGET), radius (float) 
+SLOW 减速（降低移速/攻速） duration (秒), slow_level (1-5) target (SELF/TARGET), radius (float)
+WEAKEN 虚弱（降低攻击力） duration (秒), weakness_percent (0-50%) target (SELF/TARGET)
+CONFUSE 混乱（反转移动控制） duration (秒) target (SELF/TARGET), radius (float)
+DISARM 缴械（强制切换空手） duration (秒) target (SELF/TARGET)
+
+---
+
+二、强攻系（Strength）—— 高伤害、破防、爆发
+
+原语类型 功能 必填参数 可选参数
+BURST 爆发伤害（单次高伤） value (float) damage_type (PHYSICAL/MAGIC/TRUE), crit_chance (0-30%)
+AOE_BURST 范围爆发 value (float), radius (float) damage_type, crit_chance
+ARMOR_BREAK 破甲（无视部分防御） value (float), armor_penetration (0-50%) radius (float)
+EXECUTE 斩杀（血量越低伤害越高） base_value (float), bonus_per_lost_hp (float) target (SELF/TARGET)
+STUN 眩晕（短暂昏迷） duration (秒) target (SELF/TARGET) 
+CHARGE 冲锋突进（伤害+位移） distance (float), value (float) target (SELF)
+
+---
+
+三、敏攻系（Speed）—— 高速、连击、闪避
+
+原语类型 功能 必填参数 可选参数
+DASH 突进位移 distance (float) direction (FORWARD/BACKWARD/UP/DOWN)
+COMBO 连击（连续多次低伤） hits (int), value_per_hit (float) target (SELF/TARGET), combo_window (秒) 
+PHANTOM 分身（制造幻影） duration (秒), count (int) clone_damage (0-50%)
+EVADE 闪避（短暂无敌帧） duration (秒) target (SELF)
+BACKSTAB 背刺（背后伤害加成） value (float), bonus_from_back (0-100%) target (TARGET)
+ACCELERATE 加速（提升移速/攻速） duration (秒), speed_bonus (0-50%) target (SELF/ALLIES)
+
+---
+
+四、辅助系（Auxiliary）—— 增益、净化、恢复
+
+原语类型 功能 必填参数 可选参数
+BUFF_STATS 属性增幅 attribute (ATTACK/DEFENSE/SPEED/MAX_HEALTH), percent (0-50%), duration (秒) target (SELF/ALLIES), radius (float) 
+BUFF_ALL 全属性增幅 percent (0-30%), duration (秒) target (SELF/ALLIES), radius (float)
+SHIELD_TRANSFER 护盾转移（给队友加盾） absorb_amount (float), duration (秒) target (ALLIES), radius (float)
+CLEANSE 净化（清除负面效果） 无 target (SELF/ALLIES), radius (float), remove_positive (boolean)
+HOT 持续治疗（HOT） value_per_sec (float), duration (秒) target (SELF/ALLIES), radius (float)
+REVIVE 免死（免死一次） duration (秒) target (SELF/ALLIES) 
+CD_REDUCE 冷却缩减（减少技能CD） percent (0-30%), duration (秒) target (SELF/ALLIES)
+
+---
+
+五、防御系（Defense）—— 护盾、反伤、嘲讽
+
+原语类型 功能 必填参数 可选参数
+TAUNT 嘲讽（强制攻击自己） duration (秒) radius (float), target (SELF)
+REFLECT 反伤（反弹部分伤害） percent (0-50%), duration (秒) target (SELF), radius (float)
+BARRIER 屏障（区域阻挡） duration (秒), radius (float) block_type (透明方块) 
+IRON_BODY 钢铁之躯（伤害减免） reduce_percent (0-50%), duration (秒) target (SELF)
+HARDEN 硬化（提升护甲值） armor_bonus (0-10), duration (秒) target (SELF/ALLIES)
+
+---
+
+六、食物系/生活系（Life）—— 回饱食、种地、休闲
+
+原语类型 功能 必填参数 可选参数 
+CROP_GROW 加速作物生长 growth_stage (1-7) radius (float), target (SELF) 
+FOOD_BLESS 食物祝福（使食物效果翻倍） duration (秒), bonus (0-100%) target (SELF/ALLIES) 
+HARVEST 范围收获（自动收割） radius (float) target (SELF) 
+BONEMEAL 催熟 bonemeal_level (1-5) target (SELF) 
+
+
+---
+
+七、通用 MC 机制（跨系别）
+
+原语类型 功能 必填参数 可选参数 适用系别
+SUMMON_ENTITY 生成临时实体 entity_id (String), duration (秒) count (int), target (SELF/TARGET) 全系（兽武魂觉醒）
+PROJECTILE 发射投射物 projectile_type (String), speed (float) damage (float), pierce (boolean) 敏攻/强攻
+EXPLOSION 爆炸 power (float) destroys_blocks (boolean) 强攻
+FIRE 点燃 duration (秒) radius (float), target (TARGET) 强攻
+SOUND 播放音效 sound_id (String) volume (float), pitch (float) 全系（氛围/震慑）
+PARTICLE 生成粒子 particle_type (String) count (int), speed (float) 全系（特效表现）
+TELEPORT 传送 distance (float) direction, target (SELF/TARGET) 敏攻（瞬移）/控制（换位）
+PULL 拉拽 distance (float) target (SELF) 控制（强制位移）
+KNOCKBACK 击退 strength (float) target (TARGET) 强攻/防御
+
+---
+
+🔧 AI生成约束（更新）
+
+AI在生成技能时，必须从以上系别分类中选择至少一个原语，且推荐组合体现系别特色：
+
+武魂系别 推荐原语组合示例
+控制系 BIND + SLOW + CURSE
+强攻系 BURST + ARMOR_BREAK + KNOCKBACK
+敏攻系 DASH + COMBO + EVADE
+辅助系 BUFF_STATS + SHIELD_TRANSFER + CLEANSE
+防御系 TAUNT + IRON_BODY + REFLECT
+
+AI生成的技能JSON结构（示例）：
+
+```json
+{
+  "name": "碎颅腐锤",
+  "description": "蓄力重击，造成范围伤害与尸毒。",
+  "cooldown": 20,
+  "trigger": "RIGHT_CLICK",
+  "execution": [
+    { "primitive": "AOE_DAMAGE", "radius": 3.0, "value": 5.0 },
+    { "primitive": "POTION", "effect": "HUNGER", "duration": 100, "target": "TARGET" }
+  ]
+}
+```
+
+---
+
+4. 魂技质量分级体系（三池分流 + 待确认标记）
+
+4.1 四池定义与流转规则（作者审核外部化）
+
+池名 代码 准入条件 抽取权重 流转规则
+臻品池 ZHEN_PIN 平均分 ≥ 4.0 且 评价数 ≥ 3 高（×3） 评分低于3.5时降级至品鉴池
+品鉴池 PIN_JIAN 上传时间 < 7天 或 评分 2.5~3.9 标准（×1） 7天后按评分升降级
+凡品池 FAN_PIN 评分 < 2.5 低（×0.3） 永不自动升级
+待确认池 PENDING reject_votes ≥ 5 且 差评率 > 60% 不出现在抽取中 仅标记，由外部EXE程序处理
+
+关键变更：待确认池的魂技仅被标记为 PENDING，模组在抽取时直接忽略它们。最终处理（恢复/删除）由作者通过外部EXE程序操作OSS完成。
+
+4.2 分流算法（模组侧）
+
+玩家吸收魂环时：
+
+1. 根据 (武魂+怪物注册名+血量档位) 查询云端。
+2. 过滤掉 pool == "PENDING" 的条目。
+3. 按权重从三池中随机抽取：
+   ```text
+   总权重 = (臻品池数量 × 3) + (品鉴池数量 × 1) + (凡品池数量 × 0.3)
+   ```
+4. 若无候选，触发AI生成 → 默认进入品鉴池（新品保护期）。
+
+---
+
+5. 核心交互流程（玩家视角）
+
+5.1 吸收确认GUI（含一体化评分）
+
+玩家右键吸收魂环后，弹出确认界面，布局如下：
+
+UI 元素 内容 说明
+标题 §6【第 X 魂环 · 魂技感应】 X为当前环位（1-9）
+魂技名称 碎颅腐锤 取自AI生成或云端数据
+效果描述 蓄力重击，造成范围伤害与尸毒。 展示描述
+效果预览（数值） 伤害: 5.0 (范围 3格) / 饥饿 5秒 从execution解析
+来源信息 §7上传者: 匿名魂师 · 评分: 4.2星 (12人评价) 云端已有数据时显示
+按钮1 §a【吸收此魂技】 确认吸收，魂环绑定该技能
+按钮2 §c【拒绝此魂技】 放弃吸收，魂环不消耗，魂兽白打
+按钮3（条件显示） §b【自行推演】 跳过云端数据，强制AI重新生成（需有API可用），结果仅本地缓存不上传
+评分区（吸收流程结束后显示） §7评价此魂技： [1星] [2星] [3星] [4星] [5星] 吸收成功或拒绝后，同一界面下方出现评分按钮，点击即提交，不额外弹窗
+
+流程说明：
+
+1. 玩家点击【吸收】或【拒绝】后，界面不关闭，而是动态切换为评分模式（隐藏三个主按钮，显示五个星星按钮）。
+2. 玩家点击1-5星完成评分，界面关闭，流程结束。
+3. 若玩家10秒内未评分，界面自动关闭，本次不记录评分（不强制）。
+
+5.2 后续评分指令（用环位定位）
+
+玩家吸收魂技时若未评分，或后续改变主意，可通过指令补充评分。指令直接使用“第几魂环”定位，无需记忆UUID。
+
+指令 作用 示例
+/douluo rate <环位> <1-5> 给指定魂环位的技能评分 /douluo rate 3 4 → 给第三魂环的技能评4星
+/douluo rate <环位> cancel 取消该环位已有评分（撤回） /douluo rate 3 cancel
+
+实现细节：
+
+· 玩家的每个魂环位绑定一个 uuid（云端技能ID），存储在 player_config.json 中。
+· 执行指令时，根据环位读取对应 uuid，再向云端提交评分。
+· 若该环位为空或未绑定任何技能，提示 §c[斗罗] 该魂环位暂无魂技。
+
+5.3 评分投票机制
+
+· 1-2星 → reject_votes += 1（差评累积）
+· 3星 → 中性，不计入差评
+· 4-5星 → 计入 rating_sum 和 rating_count
+· 防刷机制：同一玩家对同一个 uuid 的魂技，24小时内仅可评分一次。若重复评分，提示 §7[斗罗] 您24小时内已评价过此魂技。
+
+---
+
+6. 玩家指令速查表
+
+指令 作用
+/douluo camp solo 切换独狼模式
+/douluo camp shared 切回共享模式
+/douluo apikey <key> 设置私人API Key
+/douluo solo upload on/off 独狼上传开关
+/douluo solo download on/off 独狼下载开关
+/douluo rate <环位> <1-5> 给指定魂环位的技能评分
+/douluo rate <环位> cancel 撤回该环位的评分
+/douluo search <武魂名> <怪物名> 查询该组合所有可用魂技及评分
+/douluo upload <环位> 手动上传该环位的本地魂技至公共库
+/douluo status 查看当前配置
+
+---
+
+7. 云端数据库结构（最终完整版）
+
+```json
+{
+  "uuid": "md5(武魂+怪物注册名+血量档位)",
+  "wuhun": "昊天锤",
+  "mob_id": "minecraft:zombie",
+  "mob_health_segment": "20_30",
+  "skill_data": {
+    "name": "碎颅腐锤",
+    "description": "蓄力重击，造成范围伤害与尸毒。",
+    "cooldown": 20,
+    "trigger": "RIGHT_CLICK",
+    "execution": [...]
+  },
+  "pool": "PIN_JIAN",   // ZHEN_PIN / PIN_JIAN / FAN_PIN / PENDING
+  "stats": {
+    "rating_sum": 15,
+    "rating_count": 5,
+    "avg_rating": 3.0,
+    "downloads": 128,
+    "reject_votes": 2,
+    "upload_time": 1700000000
+  },
+  "uploader_hash": "***"
+}
+```
+
+---
+
+8. 玩家环位绑定存储（新增）
+
+player_config.json 中需记录每个魂环位绑定的技能UUID：
+
+```json
+{
+  "camp": "SHARED",
+  "api_key": "sk-xxx",
+  "solo_upload": false,
+  "solo_download": false,
+  "rings": {
+    "1": "uuid_abc123",
+    "2": "uuid_def456",
+    "3": null,   // 未吸收
+    "4": null,
+    "5": null,
+    "6": null,
+    "7": null,
+    "8": null,
+    "9": null
+  },
+  "rated_skills": {
+    "uuid_abc123": 1700000000  // 上次评分时间戳（用于24小时防刷）
+  }
+}
+```
+
+---
+
+9. 作者外部EXE程序（独立工具）
+
+9.1 职责范围
+
+该EXE程序不属于模组代码，由作者独立开发，直接读写阿里云OSS上的 public_skills.json 文件。功能包括：
+
+· 拉取待确认池：筛选 pool == "PENDING" 的所有魂技，列表展示。
+· 查看详情：展示魂技完整JSON、评分统计、差评明细。
+· 批准恢复：将魂技从 PENDING 移回 PIN_JIAN，并重置 reject_votes = 0，rating_sum = 0，rating_count = 0（给予第二次机会）。
+· 永久删除：从云端彻底移除该魂技。
+· 组合拉黑：将特定 (武魂+怪物注册名) 组合加入黑名单，模组侧在生成时若检测到该组合被拉黑，直接拒绝生成并提示“该组合已被大陆法则封印”。
+
+9.2 与模组的协作方式
+
+· 模组侧：仅负责标记 pool = "PENDING"，不处理任何审核逻辑。
+· EXE侧：直接操作OSS JSON文件，修改 pool 字段或删除条目。
+· 同步机制：模组每次查询云端时，获取的是EXE处理后的最新数据。
+
+---
+
+10. 开发任务拆解（模组侧 - 不含EXE）
+
+阶段 模块 说明
+Phase 1 指令系统 注册所有 /douluo 子指令，含 rate <环位> <分数>
+Phase 2 配置持久化 player_config.json 读写，含环位绑定和评分冷却
+Phase 3 动作原语枚举 SkillPrimitive.java 及参数Bean
+Phase 4 技能执行引擎 SkillExecutor.java，解析并执行动作序列
+Phase 5 网络层+熔断 ApiClient.java，异步请求、超时、降级
+Phase 6 OSS同步 CloudSyncService.java，启动下载/定时上传
+Phase 7 魂环吸收事件 RingAbsorbEvent.java，整合所有模块
+Phase 8 评分数据模型 RatingStats.java，云端同步
+Phase 9 加权随机抽取 PoolSelector.java，三池分流算法
+Phase 10 GUI确认界面 RingConfirmScreen.java，含四个主按钮 + 动态切换评分星标
+Phase 11 防刷机制 本地评分记录 + 24小时冷却
+
+---
+
+11. 验收标准
+
+1. GUI交互：吸收魂环时界面正常弹出，点击【吸收】后界面切换为评分星标，点击星星提交评分并关闭界面；10秒未操作自动关闭。
+2. 指令评分：/douluo rate 3 4 能正确给第三魂环的技能评4星，且在24小时内重复执行有防刷提示。
+3. 分流验证：运行100次抽取，臻品池被抽中次数显著高于凡品池。
+4. 评分生效：评1星后 reject_votes+1，达到阈值后自动进入 PENDING 池，且不再出现在常规抽取中。
+5. 外部审核联动：作者通过EXE将某魂技从 PENDING 恢复为 PIN_JIAN 后，模组下次查询时该魂技重新进入抽取池。

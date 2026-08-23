@@ -1,0 +1,27 @@
+{
+  "criteria": {
+    "requirement": {
+      "trigger": "minecraft:tick"
+    }
+  },
+  "display": {
+    "announce_to_chat": false,
+    "background": "all_spirit_continent:textures/gui/advancements/backgrounds/soul_ring.png",
+    "description": {
+      "translate": "advancement.all_spirit_continent.root.description"
+    },
+    "icon": {
+      "count": 1,
+      "id": "all_spirit_continent:soul_ring"
+    },
+    "show_toast": false,
+    "title": {
+      "translate": "advancement.all_spirit_continent.root.title"
+    }
+  },
+  "requirements": [
+    [
+      "requirement"
+    ]
+  ]
+}
