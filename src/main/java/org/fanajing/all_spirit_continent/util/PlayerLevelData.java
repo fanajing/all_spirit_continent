@@ -7,7 +7,9 @@ import net.minecraft.network.codec.StreamCodec;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 /**
  * 玩家等级系统数据，通过 NeoForge Attachment 挂载到每个玩家。
@@ -25,6 +27,8 @@ public class PlayerLevelData {
     private String title = "";
     /** 每环年限（年，index = 环序号，0 = 无环占位；十年=10、百年=100…百万年=1000000，支持非整数级年限如 6070） */
     private List<Integer> ringAges;
+    /** 已消耗「重刷（自行推演）」机会的环位集合（index 与 ringAges 一致；每玩家每环位仅一次） */
+    private final Set<Integer> rerolledRings;
 
     /** 持久化序列化 Codec（服务端 NBT 存档） */
     public static final Codec<PlayerLevelData> CODEC = RecordCodecBuilder.create(instance ->
@@ -35,7 +39,8 @@ public class PlayerLevelData {
                     Codec.FLOAT.fieldOf("spiritPower").forGetter(d -> d.spiritPower),
                     Codec.FLOAT.fieldOf("maxSpiritPower").forGetter(d -> d.maxSpiritPower),
                     Codec.STRING.optionalFieldOf("title", "").forGetter(d -> d.title),
-                    Codec.INT.listOf().optionalFieldOf("ringAges", List.of()).forGetter(d -> d.ringAges)
+                    Codec.INT.listOf().optionalFieldOf("ringAges", List.of()).forGetter(d -> d.ringAges),
+                    Codec.INT.listOf().optionalFieldOf("rerolledRings", List.of()).forGetter(d -> List.copyOf(d.rerolledRings))
             ).apply(instance, PlayerLevelData::new)
     );
 
@@ -61,6 +66,7 @@ public class PlayerLevelData {
                                 buf.readFloat(),
                                 buf.readFloat(),
                                 buf.readUtf(),
+                                List.of(),
                                 List.of()
                         );
                         for (int i = 0; i < SoulRingLayout.MAX_RINGS; i++) {
@@ -73,11 +79,12 @@ public class PlayerLevelData {
     /** 无参构造（AttachmentType 工厂需要） */
     public PlayerLevelData() {
         this.ringAges = new ArrayList<>(Collections.nCopies(SoulRingLayout.MAX_RINGS, 0));
+        this.rerolledRings = new HashSet<>();
     }
 
     /** 全参构造（Codec 反序列化）：旧档位（0~5）自动迁移为具体年限；精神力上限按成长公式重算 */
     public PlayerLevelData(boolean activated, int level, int exp, float spiritPower, float maxSpiritPower,
-                           String title, List<Integer> ringAges) {
+                           String title, List<Integer> ringAges, List<Integer> rerolledRings) {
         this.activated = activated;
         this.level = level;
         this.exp = Math.max(0, exp);
@@ -86,6 +93,7 @@ public class PlayerLevelData {
         for (int age : ringAges) {
             this.ringAges.add(migrateRingAge(age));
         }
+        this.rerolledRings = new HashSet<>(rerolledRings == null ? List.of() : rerolledRings);
         // 精神力上限按成长公式重算（旧存档的固定值被覆盖，保证新成长公式生效）；
         // maxSpiritPower 参数仅用于保持 Codec 格式兼容
         this.maxSpiritPower = SoulGrowth.maxSpiritPower(this);
@@ -230,6 +238,17 @@ public class PlayerLevelData {
         }
     }
 
+    // ----- 重刷（自行推演）机会 -----
+    /** 该环位是否已消耗重刷机会（每玩家每环位仅一次） */
+    public boolean hasRerolled(int ringIndex) {
+        return rerolledRings.contains(ringIndex);
+    }
+
+    /** 标记该环位已消耗重刷机会 */
+    public void markRerolled(int ringIndex) {
+        rerolledRings.add(ringIndex);
+    }
+
     /** 从另一份数据整体复制（死亡保留/换维度同步用，含魂环与经验） */
     public void copyFrom(PlayerLevelData other) {
         this.activated = other.activated;
@@ -239,6 +258,8 @@ public class PlayerLevelData {
         this.maxSpiritPower = other.maxSpiritPower;
         this.title = other.title;
         this.ringAges = new ArrayList<>(other.ringAges);
+        this.rerolledRings.clear();
+        this.rerolledRings.addAll(other.rerolledRings);
     }
 
     /** 重置为全新玩家状态（死亡清除魂师身份用：魂师身份与全部魂环一并删除） */
@@ -250,5 +271,6 @@ public class PlayerLevelData {
         this.maxSpiritPower = 100f;
         this.title = "";
         this.ringAges = new ArrayList<>(Collections.nCopies(SoulRingLayout.MAX_RINGS, 0));
+        this.rerolledRings.clear();
     }
 }

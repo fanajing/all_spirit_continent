@@ -21,16 +21,26 @@ import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.Level;
 import net.neoforged.neoforge.network.PacketDistributor;
 import org.fanajing.all_spirit_continent.All_spirit_continent;
+import org.fanajing.all_spirit_continent.cloud.ApiClient;
+import org.fanajing.all_spirit_continent.cloud.CloudSyncService;
+import org.fanajing.all_spirit_continent.data.PlayerSkillDataStore;
 import org.fanajing.all_spirit_continent.init.ModAttachments;
 import org.fanajing.all_spirit_continent.network.OpenRingAbsorbScreenPayload;
+import org.fanajing.all_spirit_continent.skill.PoolSelector;
+import org.fanajing.all_spirit_continent.skill.SkillEntry;
 import org.fanajing.all_spirit_continent.util.PlayerLevelData;
+import org.fanajing.all_spirit_continent.util.PlayerSkillConfig;
 import org.fanajing.all_spirit_continent.util.SoulBeastAge;
 import org.fanajing.all_spirit_continent.util.SoulExp;
 import org.fanajing.all_spirit_continent.util.TitleSystem;
+import org.fanajing.all_spirit_continent.util.UploaderAnonymizer;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * 魂环实体：击杀魂兽后原地生成的环状实体（不是掉落物）。
@@ -55,10 +65,23 @@ public class SoulRingEntity extends Entity {
     private static final EntityDataAccessor<String> DATA_SOURCE_TYPE =
             SynchedEntityData.defineId(SoulRingEntity.class, EntityDataSerializers.STRING);
 
+    /** 魂技组合键的血量档位（如 "100_999"，由魂兽年限档位推导），同步数据；空字符串 = 未知 */
+    private static final EntityDataAccessor<String> DATA_HEALTH_SEGMENT =
+            SynchedEntityData.defineId(SoulRingEntity.class, EntityDataSerializers.STRING);
+
+    /** 掉落来源魂兽被击杀时的最大生命值（AI 数值规划提示用），同步数据；0 = 未知 */
+    private static final EntityDataAccessor<Float> DATA_SOURCE_MAX_HEALTH =
+            SynchedEntityData.defineId(SoulRingEntity.class, EntityDataSerializers.FLOAT);
+
     /** 击杀参与者 UUID 列表（服务端权威，死亡时由魂兽系统写入，NBT 持久化） */
     private List<UUID> participants = new ArrayList<>();
     /** 已吸收经验的玩家 UUID 列表（NBT 持久化，全部参与者吸收完后魂环消散） */
     private List<UUID> absorbed = new ArrayList<>();
+
+    /** 魂技感应会话：ringId + ":" + playerUuid → 感应到的技能（GUI 确认时取用，环消散自然失效） */
+    private static final Map<String, SkillEntry> SENSING_SESSIONS = new ConcurrentHashMap<>();
+    /** 正在 AI 生成中的玩家（单玩家并发限制 1，防刷接口） */
+    private static final Set<UUID> GENERATING = new ConcurrentHashMap<>().newKeySet();
 
     public SoulRingEntity(EntityType<?> type, Level level) {
         super(type, level);
@@ -75,6 +98,51 @@ public class SoulRingEntity extends Entity {
     protected void defineSynchedData(SynchedEntityData.Builder builder) {
         builder.define(DATA_AGE, 0);
         builder.define(DATA_SOURCE_TYPE, "");
+        builder.define(DATA_HEALTH_SEGMENT, "");
+        builder.define(DATA_SOURCE_MAX_HEALTH, 0F);
+    }
+
+    // ===== 魂技感应会话 =====
+
+    /** 取玩家对该魂环的感应技能；无会话返回 null */
+    public static SkillEntry getSession(int ringEntityId, UUID playerUuid) {
+        return SENSING_SESSIONS.get(sessionKey(ringEntityId, playerUuid));
+    }
+
+    /** 记录玩家对该魂环的感应技能 */
+    public static void putSession(int ringEntityId, UUID playerUuid, SkillEntry entry) {
+        if (entry != null) SENSING_SESSIONS.put(sessionKey(ringEntityId, playerUuid), entry);
+    }
+
+    /** 移除玩家对该魂环的感应技能（吸收/拒绝后调用） */
+    public static void removeSession(int ringEntityId, UUID playerUuid) {
+        SENSING_SESSIONS.remove(sessionKey(ringEntityId, playerUuid));
+    }
+
+    private static String sessionKey(int ringEntityId, UUID playerUuid) {
+        return ringEntityId + ":" + playerUuid;
+    }
+
+    /** 由魂兽年限推导魂技组合键血量档位（保证云端键稳定） */
+    public static String healthSegmentOf(int age) {
+        return switch (SoulBeastAge.tierOf(age)) {
+            case 0 -> "1_99";
+            case 1 -> "100_999";
+            case 2 -> "1000_9999";
+            case 3 -> "10000_99999";
+            case 4 -> "100000_999999";
+            default -> "1000000_99990000";
+        };
+    }
+
+    /** 魂技组合键血量档位；未写入返回空字符串 */
+    public String getHealthSegment() {
+        return entityData.get(DATA_HEALTH_SEGMENT);
+    }
+
+    /** 写入血量档位（魂兽死亡生成魂环时由年限档位推导，服务端） */
+    public void setHealthSegment(String segment) {
+        entityData.set(DATA_HEALTH_SEGMENT, segment == null ? "" : segment);
     }
 
     /** 魂环可被准星瞄准（默认 Entity.isPickable 返回 false，右键交互将永远无法命中） */
@@ -112,6 +180,16 @@ public class SoulRingEntity extends Entity {
     /** 写入掉落来源怪物类型本地化键（魂兽死亡生成魂环时调用，服务端） */
     public void setSourceType(String descriptionId) {
         entityData.set(DATA_SOURCE_TYPE, descriptionId == null ? "" : descriptionId);
+    }
+
+    /** 掉落来源魂兽被击杀时的最大生命值；0 = 未知（AI 数值规划提示用） */
+    public float getSourceMaxHealth() {
+        return entityData.get(DATA_SOURCE_MAX_HEALTH);
+    }
+
+    /** 写入掉落来源魂兽被击杀时的最大生命值（魂兽死亡生成魂环时调用，服务端） */
+    public void setSourceMaxHealth(float health) {
+        entityData.set(DATA_SOURCE_MAX_HEALTH, health);
     }
 
     // ===== 击杀参与者与已吸收记录 =====
@@ -159,9 +237,222 @@ public class SoulRingEntity extends Entity {
             return performAbsorb(serverPlayer, false) ? InteractionResult.CONSUME : InteractionResult.FAIL;
         }
 
-        // 不蹲右键：弹出吸收确认窗口（怪物种类/年限/技能/吸收概率），点「吸收」才执行
-        PacketDistributor.sendToPlayer(serverPlayer, new OpenRingAbsorbScreenPayload(getId()));
+        // 不蹲右键：魂技感应流程（校验 → 三池抽取/黑名单/AI 生成 → 弹窗展示技能信息）
+        openSensing(serverPlayer);
         return InteractionResult.CONSUME;
+    }
+
+    // ===== V6.0 魂技感应与吸收 =====
+
+    /**
+     * 魂技感应（服务端，不蹲右键点击魂环触发）：
+     * 基础校验 → 组合键 (武魂+怪物注册名+血量档位) → 黑名单拒绝 →
+     * 本地缓存三池抽取（命中直接开窗）→ 无候选异步 AI 生成（默认入品鉴池）。
+     */
+    public void openSensing(ServerPlayer serverPlayer) {
+        if (level().isClientSide) return;
+        if (!validateAbsorb(serverPlayer)) return;
+
+        // ⑤ 瓶颈校验：只有达到瓶颈节点（10/20/.../90）才能吸收新的魂环与魂技，
+        //    未达瓶颈仅可蹲着右键吸收经验，感应/吸收均被拒绝
+        PlayerLevelData lvl = serverPlayer.getData(ModAttachments.PLAYER_LEVEL_DATA.get());
+        if (!SoulExp.isBottleneck(lvl)) {
+            serverPlayer.sendSystemMessage(
+                    Component.translatable("msg.all_spirit_continent.skill_need_bottleneck")
+                            .withStyle(ChatFormatting.RED));
+            return;
+        }
+
+        PlayerSkillConfig cfg = PlayerSkillDataStore.get(serverPlayer.serverLevel()).config(serverPlayer);
+        String wuhun = cfg.wuhun() == null || cfg.wuhun().isEmpty() ? PlayerSkillConfig.DEFAULT_WUHUN : cfg.wuhun();
+        String mobId = getSourceType().isEmpty() ? "unknown" : getSourceType();
+        String segment = getHealthSegment().isEmpty() ? "0_0" : getHealthSegment();
+
+        // 黑名单组合：直接拒绝并提示「已被大陆法则封印」
+        if (CloudSyncService.isBlacklisted(wuhun, mobId, segment)) {
+            serverPlayer.sendSystemMessage(
+                    Component.translatable("msg.all_spirit_continent.skill_blacklisted")
+                            .withStyle(ChatFormatting.RED));
+            return;
+        }
+
+        // 本地缓存三池抽取（PENDING 已剔除，命中累加下载量）
+        SkillEntry picked = PoolSelector.pickWithDownload(CloudSyncService.findSkills(wuhun, mobId, segment));
+        if (picked != null) {
+            putSession(getId(), serverPlayer.getUUID(), picked);
+            openScreen(serverPlayer, picked, false);
+            return;
+        }
+
+        // 无候选 → 异步 AI 生成（单玩家并发 1，避免接口滥用）
+        if (!GENERATING.add(serverPlayer.getUUID())) {
+            serverPlayer.sendSystemMessage(
+                    Component.translatable("msg.all_spirit_continent.skill_generating")
+                            .withStyle(ChatFormatting.GRAY));
+            return;
+        }
+        ApiClient.generate(cfg, wuhun, mobId, segment, getRingAge(), getSourceMaxHealth()).whenComplete((opt, ex) -> {
+            GENERATING.remove(serverPlayer.getUUID());
+            serverPlayer.server.execute(() -> {
+                if (!serverPlayer.isAlive()) return;
+                if (ex != null || opt.isEmpty() || !opt.get().isValid()) {
+                    serverPlayer.sendSystemMessage(
+                            Component.translatable("msg.all_spirit_continent.skill_gen_failed")
+                                    .withStyle(ChatFormatting.RED));
+                    return;
+                }
+                SkillEntry entry = SkillEntry.fromAi(opt.get());
+                // 上传时写入魂环实体实际年限（skill_data.ring_age 驱动伤害缩放，后台可识别年限分布）
+                entry = entry.withSkill(entry.skill().withRingAge(getRingAge()));
+                // 魂兽来自非原版 mod → 自动标记依赖，防止污染未安装该 mod 的玩家库
+                entry = autoRequireMod(entry);
+                // 上传者：游戏 ID 明文（玩家下载时展示来源）+ 匿名哈希（后台统计/封禁，改名也可追踪）
+                entry = new SkillEntry(entry.skill(), entry.pool(), entry.stats(),
+                        UploaderAnonymizer.hash(serverPlayer.getUUID()),
+                        serverPlayer.getGameProfile().getName());
+                CloudSyncService.queueSkill(entry); // 入本地库，共享阵营排队写回云端
+                putSession(getId(), serverPlayer.getUUID(), entry);
+                openScreen(serverPlayer, entry, true);
+            });
+        });
+    }
+
+    /**
+     * 根据魂兽来源自动标记依赖 mod：mob_id 形如 entity.twilightforest.naga，
+     * 命名空间非 minecraft 即视为依赖该 mod，只有安装它的玩家才会下载/抽取到。
+     */
+    private static SkillEntry autoRequireMod(SkillEntry entry) {
+        String mobId = entry.skill().mobId();
+        if (mobId == null || !mobId.startsWith("entity.")) return entry;
+        String ns = mobId.substring("entity.".length());
+        int dot = ns.indexOf('.');
+        ns = dot > 0 ? ns.substring(0, dot) : ns;
+        if (ns.isEmpty() || "minecraft".equals(ns)) return entry;
+        List<String> reqs = new ArrayList<>();
+        if (entry.skill().requiresMods() != null) reqs.addAll(entry.skill().requiresMods());
+        if (!reqs.contains(ns)) reqs.add(ns);
+        return entry.withSkill(entry.skill().withRequiresMods(reqs));
+    }
+
+    /**
+     * 吸收魂技：仅瓶颈节点允许——把技能绑定到即将获得的第 N 魂环位后吸收魂环。
+     * 非瓶颈一律拒绝（不绑定、不吸收、不消耗魂环），未达瓶颈请蹲着右键吸收经验。
+     */
+    public void absorbWithSkill(ServerPlayer serverPlayer, SkillEntry entry) {
+        PlayerLevelData data = serverPlayer.getData(ModAttachments.PLAYER_LEVEL_DATA.get());
+        if (!SoulExp.isBottleneck(data)) {
+            serverPlayer.sendSystemMessage(
+                    Component.translatable("msg.all_spirit_continent.skill_need_bottleneck")
+                            .withStyle(ChatFormatting.RED));
+            return;
+        }
+        int slot = data.getLevel() / 10;             // 即将获得的第 N 魂环
+        // 绑定技能时写入魂环实际年限，驱动后续伤害随年限缩放
+        SkillEntry bound = entry.withSkill(entry.skill().withRingAge(getRingAge()));
+        PlayerSkillDataStore.get(serverPlayer.serverLevel()).bindSkill(serverPlayer, slot, bound.skill());
+        serverPlayer.sendSystemMessage(
+                Component.translatable("msg.all_spirit_continent.skill_bound", slot, bound.skill().name())
+                        .withStyle(ChatFormatting.GOLD));
+        performAbsorb(serverPlayer, true);
+    }
+
+    /** 自行推演（重刷）：强制 AI 重生成（仅本地，不入云端上传队列），更新会话并回发新技能。每玩家每环位仅一次 */
+    public void rollSkill(ServerPlayer serverPlayer, SkillEntry oldEntry) {
+        if (level().isClientSide) return;
+        // 重刷机会校验：仅当已出现魂技但玩家不满意时消耗机会，每玩家每环位一次
+        PlayerLevelData lvl = serverPlayer.getData(ModAttachments.PLAYER_LEVEL_DATA.get());
+        int slot = lvl.getLevel() / 10;
+        if (lvl.hasRerolled(slot)) {
+            serverPlayer.sendSystemMessage(
+                    Component.translatable("msg.all_spirit_continent.skill_reroll_used")
+                            .withStyle(ChatFormatting.RED));
+            return;
+        }
+        PlayerSkillConfig cfg = PlayerSkillDataStore.get(serverPlayer.serverLevel()).config(serverPlayer);
+        String wuhun = cfg.wuhun() == null || cfg.wuhun().isEmpty() ? PlayerSkillConfig.DEFAULT_WUHUN : cfg.wuhun();
+        String mobId = getSourceType().isEmpty() ? "unknown" : getSourceType();
+        String segment = getHealthSegment().isEmpty() ? "0_0" : getHealthSegment();
+
+        if (!GENERATING.add(serverPlayer.getUUID())) {
+            serverPlayer.sendSystemMessage(
+                    Component.translatable("msg.all_spirit_continent.skill_generating")
+                            .withStyle(ChatFormatting.GRAY));
+            return;
+        }
+        ApiClient.generate(cfg, wuhun, mobId, segment, getRingAge(), getSourceMaxHealth()).whenComplete((opt, ex) -> {
+            GENERATING.remove(serverPlayer.getUUID());
+            serverPlayer.server.execute(() -> {
+                if (!serverPlayer.isAlive()) return;
+                if (ex != null || opt.isEmpty() || !opt.get().isValid()) {
+                    serverPlayer.sendSystemMessage(
+                            Component.translatable("msg.all_spirit_continent.skill_gen_failed")
+                                    .withStyle(ChatFormatting.RED));
+                    return;
+                }
+                SkillEntry entry = SkillEntry.fromAi(opt.get()); // ROLL 仅本地：不 queueSkill
+                lvl.markRerolled(slot); // 重刷成功即消耗该环位的一次机会
+                putSession(getId(), serverPlayer.getUUID(), entry);
+                openScreen(serverPlayer, entry, true);
+            });
+        });
+    }
+
+    /** 开窗：向玩家发送魂技感应信息 */
+    private void openScreen(ServerPlayer serverPlayer, SkillEntry entry, boolean aiGenerated) {
+        PacketDistributor.sendToPlayer(serverPlayer, new OpenRingAbsorbScreenPayload(
+                getId(),
+                entry.skill().toJson().toString(),
+                ringNumberFor(serverPlayer),
+                getRingAge(),
+                entry.stats().avg(),
+                entry.stats().ratingCount(),
+                aiGenerated,
+                entry.uploaderName()
+        ));
+    }
+
+    /** 魂技感应窗口标题的「第 X 魂环」：瓶颈时是即将获得的环位，否则为当前最高环 */
+    private int ringNumberFor(ServerPlayer serverPlayer) {
+        PlayerLevelData data = serverPlayer.getData(ModAttachments.PLAYER_LEVEL_DATA.get());
+        if (SoulExp.isBottleneck(data)) {
+            return data.getLevel() / 10;
+        }
+        return Math.max(1, data.getRingCount());
+    }
+
+    /** 吸收前基础校验（激活/参与者/已吸收/满级），失败自动提示并返回 false */
+    private boolean validateAbsorb(ServerPlayer serverPlayer) {
+        PlayerLevelData data = serverPlayer.getData(ModAttachments.PLAYER_LEVEL_DATA.get());
+
+        // ① 觉醒校验：等级系统未激活无法吸收
+        if (!data.isActivated()) {
+            serverPlayer.sendSystemMessage(
+                    Component.translatable("msg.all_spirit_continent.exp_not_activated")
+                            .withStyle(ChatFormatting.RED));
+            return false;
+        }
+        // ② 参与者校验：只有参与击杀的玩家才能吸收
+        if (!isParticipant(serverPlayer.getUUID())) {
+            serverPlayer.sendSystemMessage(
+                    Component.translatable("msg.all_spirit_continent.exp_not_participant")
+                            .withStyle(ChatFormatting.RED));
+            return false;
+        }
+        // ③ 已吸收校验：每人只能吸收一次（多人平分）
+        if (isAbsorbed(serverPlayer.getUUID())) {
+            serverPlayer.sendSystemMessage(
+                    Component.translatable("msg.all_spirit_continent.exp_absorbed")
+                            .withStyle(ChatFormatting.RED));
+            return false;
+        }
+        // ④ 满级校验：极限斗罗（99级）无法再获得经验
+        if (data.getLevel() >= TitleSystem.JI_XIAN_LEVEL) {
+            serverPlayer.sendSystemMessage(
+                    Component.translatable("msg.all_spirit_continent.exp_full")
+                            .withStyle(ChatFormatting.RED));
+            return false;
+        }
+        return true;
     }
 
     /**
@@ -183,37 +474,8 @@ public class SoulRingEntity extends Entity {
     public boolean performAbsorb(ServerPlayer serverPlayer, boolean allowRingGain) {
         PlayerLevelData data = serverPlayer.getData(ModAttachments.PLAYER_LEVEL_DATA.get());
 
-        // ① 觉醒校验：等级系统未激活无法吸收
-        if (!data.isActivated()) {
-            serverPlayer.sendSystemMessage(
-                    Component.translatable("msg.all_spirit_continent.exp_not_activated")
-                            .withStyle(ChatFormatting.RED));
-            return false;
-        }
-
-        // ② 参与者校验：只有参与击杀的玩家才能吸收
-        if (!isParticipant(serverPlayer.getUUID())) {
-            serverPlayer.sendSystemMessage(
-                    Component.translatable("msg.all_spirit_continent.exp_not_participant")
-                            .withStyle(ChatFormatting.RED));
-            return false;
-        }
-
-        // ③ 已吸收校验：每人只能吸收一次（多人平分）
-        if (isAbsorbed(serverPlayer.getUUID())) {
-            serverPlayer.sendSystemMessage(
-                    Component.translatable("msg.all_spirit_continent.exp_absorbed")
-                            .withStyle(ChatFormatting.RED));
-            return false;
-        }
-
-        // ④ 满级校验：极限斗罗（99级）无法再获得经验
-        if (data.getLevel() >= TitleSystem.JI_XIAN_LEVEL) {
-            serverPlayer.sendSystemMessage(
-                    Component.translatable("msg.all_spirit_continent.exp_full")
-                            .withStyle(ChatFormatting.RED));
-            return false;
-        }
+        // ①-④ 基础校验（激活/参与者/已吸收/满级），失败自动提示
+        if (!validateAbsorb(serverPlayer)) return false;
 
         // ⑤ 瓶颈获取魂环分支：节点等级（10/20/.../90）未获得对应魂环
         //    → 吸收魂环直接获得新魂环（年限继承魂环实体年限，不升级、不结算经验，封顶解除）；
@@ -292,6 +554,8 @@ public class SoulRingEntity extends Entity {
     protected void addAdditionalSaveData(CompoundTag tag) {
         tag.putInt("RingAge", getRingAge());
         tag.putString("SourceType", getSourceType());
+        tag.putString("HealthSegment", getHealthSegment());
+        tag.putFloat("SourceMaxHealth", getSourceMaxHealth());
         tag.put("Participants", toUuidList(participants));
         tag.put("Absorbed", toUuidList(absorbed));
     }
@@ -300,6 +564,10 @@ public class SoulRingEntity extends Entity {
     protected void readAdditionalSaveData(CompoundTag tag) {
         setRingAge(tag.getInt("RingAge"));
         setSourceType(tag.getString("SourceType"));
+        setHealthSegment(tag.getString("HealthSegment"));
+        if (tag.contains("SourceMaxHealth")) {
+            setSourceMaxHealth(tag.getFloat("SourceMaxHealth"));
+        }
         participants = fromUuidList(tag.getList("Participants", Tag.TAG_STRING));
         absorbed = fromUuidList(tag.getList("Absorbed", Tag.TAG_STRING));
     }

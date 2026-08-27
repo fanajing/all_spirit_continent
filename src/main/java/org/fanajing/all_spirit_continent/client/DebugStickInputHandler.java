@@ -48,6 +48,8 @@ public class DebugStickInputHandler {
     private static int holdTicks = 0;
     /** 一次按住期间是否已触发导出（防止每 tick 重复写文件） */
     private static boolean exported = false;
+    /** 增减等级模式右键上一次按下状态（按下沿检测，每按一次只发一个包） */
+    private static boolean levelUsePrevDown = false;
 
     @SubscribeEvent
     public static void onMouseScroll(InputEvent.MouseScrollingEvent event) {
@@ -136,13 +138,17 @@ public class DebugStickInputHandler {
         }
 
         // ===== 增减等级模式：右键等级 +1，Alt+右键等级 -1（服务端校验执行） =====
+        // 注意：keyUse 的「点击」在 vanilla handleKeybinds 中已被 rightClickMouse() 消耗，
+        // 因此在 ClientTickEvent.Post 里 consumeClick() 永远返回 false，无法触发发包。
+        // 改为检测右键「按下沿」（isDown + 上次状态），每按一次只发一个包。
         ItemStack heldLevel = player.getMainHandItem();
-        if (heldLevel.is(ModItems.TIAOSHI_BANG.get())
-                && TiaoShiBangItem.getMode(heldLevel) == DebugStickMode.LEVEL) {
-            while (mc.options.keyUse.consumeClick()) {
-                PacketDistributor.sendToServer(new AdjustLevelPayload(Screen.hasAltDown() ? -1 : 1));
-            }
+        boolean levelMode = heldLevel.is(ModItems.TIAOSHI_BANG.get())
+                && TiaoShiBangItem.getMode(heldLevel) == DebugStickMode.LEVEL;
+        boolean useDown = mc.screen == null && mc.options.keyUse.isDown();
+        if (levelMode && useDown && !levelUsePrevDown) {
+            PacketDistributor.sendToServer(new AdjustLevelPayload(Screen.hasAltDown() ? -1 : 1));
         }
+        levelUsePrevDown = levelMode && useDown;
 
         ItemStack held = player.getMainHandItem();
         boolean valid = held.is(ModItems.TIAOSHI_BANG.get())

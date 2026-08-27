@@ -45,9 +45,10 @@ public class SoulRingAbsorbScreen extends Screen {
                 .bounds(this.width / 2 + 8, buttonY, 100, 20).build());
     }
 
-    /** 「吸收」按钮：发确认包给服务端执行吸收，然后关闭窗口 */
+    /** 「吸收」按钮：发确认包给服务端执行吸收，然后关闭窗口（V6.0 已由 RingConfirmScreen 全面替换） */
     private void onConfirm() {
-        PacketDistributor.sendToServer(new ConfirmRingAbsorbPayload(ringEntityId));
+        PacketDistributor.sendToServer(new ConfirmRingAbsorbPayload(
+                ringEntityId, ConfirmRingAbsorbPayload.ACTION_ABSORB, 0));
         onClose();
     }
 

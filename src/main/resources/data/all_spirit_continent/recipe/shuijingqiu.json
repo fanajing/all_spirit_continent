@@ -1,0 +1,24 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "misc",
+  "pattern": [
+    "DAD",
+    "ABA",
+    "DAD"
+  ],
+  "key": {
+    "D": {
+      "item": "minecraft:diamond"
+    },
+    "A": {
+      "item": "minecraft:amethyst_shard"
+    },
+    "B": {
+      "item": "minecraft:amethyst_block"
+    }
+  },
+  "result": {
+    "id": "all_spirit_continent:shuijingqiu",
+    "count": 1
+  }
+}

@@ -117,11 +117,13 @@ public class SoulBeastSpawnHandler {
         }
 
         // ③ 默认逻辑：自然/区块/事件生成（含村庄铁傀儡）魂兽化；铁傀儡玩家建造（COMMAND）也纳入；
-        // 刷怪笼/刷怪蛋/结构/命令生成的其他生物不魂兽化，防止刷怪塔刷魂环
+        // 刷怪笼生成按配置 spawnerSoulBeast 决定（默认开启：暮色森林等 mod 的 boss 均通过刷怪笼生成）；
+        // 刷怪蛋/结构/命令生成的其他生物不魂兽化
         MobSpawnType type = mob.getSpawnType();
         boolean naturalSpawn = type == MobSpawnType.NATURAL
                 || type == MobSpawnType.CHUNK_GENERATION
-                || type == MobSpawnType.EVENT;
+                || type == MobSpawnType.EVENT
+                || (SoulRingConfig.SPAWNER_SOUL_BEAST.get() && type == MobSpawnType.SPAWNER);
         boolean golemSpawn = mob.getType() == EntityType.IRON_GOLEM
                 && type != MobSpawnType.SPAWN_EGG;
         if (!naturalSpawn && !golemSpawn) return;
@@ -282,6 +284,8 @@ public class SoulBeastSpawnHandler {
         SoulRingEntity ring = new SoulRingEntity(ModEntities.SOUL_RING_ENTITY.get(), entity.level());
         ring.setRingAge(age);
         ring.setSourceType(entity.getType().getDescriptionId());
+        ring.setHealthSegment(SoulRingEntity.healthSegmentOf(age)); // V6.0 魂技组合键血量档位
+        ring.setSourceMaxHealth(entity.getMaxHealth()); // AI 数值规划：魂兽被击杀时的实际最大生命
         ring.setParticipants(participants);
         ring.setPos(entity.getX(), entity.getY() + 0.1, entity.getZ());
         entity.level().addFreshEntity(ring);

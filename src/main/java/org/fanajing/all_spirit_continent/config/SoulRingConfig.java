@@ -46,6 +46,19 @@ public class SoulRingConfig {
                     "# some_mod:custom_boss=500000-900000")
                     .defineListAllowEmpty("customSoulRingOverrides", List::of, () -> "", o -> o instanceof String);
 
+    /**
+     * 刷怪笼刷出的生物是否魂兽化（默认开启）。
+     * 暮色森林等 mod 的 boss 均通过刷怪笼/刷怪点生成，关闭后这些生物不会变成魂兽；
+     * 若担心玩家搭建刷怪塔刷魂环，可改为 false。
+     */
+    public static final ModConfigSpec.BooleanValue SPAWNER_SOUL_BEAST =
+            BUILDER.comment(
+                    "Whether mobs spawned from spawners become soul beasts (drop soul rings).",
+                    "Twilight Forest bosses etc. spawn from spawners, so keep true to let them",
+                    "turn into soul beasts. Set false to prevent spawner-farm soul ring farming.",
+                    "Default: true")
+                    .define("spawnerSoulBeast", true);
+
     public static final ModConfigSpec SPEC = BUILDER.build();
 
     /** 单条覆盖规则：实体 ID → 年限范围（闭区间） */

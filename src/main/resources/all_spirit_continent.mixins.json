@@ -8,7 +8,8 @@
         "RangedAttributeMixin"
     ],
     "client": [
-        "client.EntityRendererMixin"
+        "client.EntityRendererMixin",
+        "client.GuiMixin"
     ],
     "injectors": {
         "defaultRequire": 1

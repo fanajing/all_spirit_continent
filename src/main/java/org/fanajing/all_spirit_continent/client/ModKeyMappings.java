@@ -26,10 +26,26 @@ public class ModKeyMappings {
             CATEGORY
     );
 
+    /** V6.0 释放魂技（默认 R 键，开武魂状态下对当前激活环位生效） */
+    public static final KeyMapping SHI_FANG_JI_NENG = new KeyMapping(
+            "key.all_spirit_continent.cast_skill",
+            InputConstants.KEY_R,
+            CATEGORY
+    );
+
+    /** V6.0 切换激活魂环位（默认 G 键，在已获魂环数内循环） */
+    public static final KeyMapping QIE_HUAN_HUAN_WEI = new KeyMapping(
+            "key.all_spirit_continent.cycle_ring",
+            InputConstants.KEY_G,
+            CATEGORY
+    );
+
     private ModKeyMappings() {}
 
     @SubscribeEvent
     public static void registerKeyMappings(RegisterKeyMappingsEvent event) {
         event.register(KAI_WU_HUN);
+        event.register(SHI_FANG_JI_NENG);
+        event.register(QIE_HUAN_HUAN_WEI);
     }
 }

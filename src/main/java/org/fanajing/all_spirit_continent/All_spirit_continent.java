@@ -44,6 +44,10 @@ public class All_spirit_continent {
         modContainer.registerConfig(ModConfig.Type.SERVER,
                 org.fanajing.all_spirit_continent.config.SoulRingConfig.SPEC,
                 "all_spirit_continent-soul_ring.toml");
+        // config/all_spirit_continent-cloud.toml：OSS/AI 云端配置（V6.0 魂技社区共享系统）
+        modContainer.registerConfig(ModConfig.Type.SERVER,
+                org.fanajing.all_spirit_continent.config.CloudConfig.SPEC,
+                "all_spirit_continent-cloud.toml");
 
         // === 注册所有模组组件 ===
         ModItems.ITEMS.register(modEventBus);
@@ -67,6 +71,14 @@ public class All_spirit_continent {
     @SubscribeEvent
     public void onServerStarting(ServerStartingEvent event) {
         LOGGER.info("全魂大陆 - 服务端启动中，欢迎游玩本模组!");
+        // V6.0 云端同步服务：启动拉取魂技库/黑名单，定时增量同步
+        org.fanajing.all_spirit_continent.cloud.CloudSyncService.onServerStarted(event.getServer().overworld());
+    }
+
+    @SubscribeEvent
+    public void onServerStopping(net.neoforged.neoforge.event.server.ServerStoppingEvent event) {
+        // V6.0 云端同步服务：停止前写回本地改动
+        org.fanajing.all_spirit_continent.cloud.CloudSyncService.onServerStopped();
     }
 
     /**
@@ -99,8 +111,26 @@ public class All_spirit_continent {
         if (event.isWasDeath()) {
             event.getEntity().setHealth(event.getEntity().getMaxHealth());
         }
-        // 同步到客户端
-        syncLevelDataToClient(event.getEntity());
+        // 注意：此处不能立即 syncLevelDataToClient —— Clone 事件触发时客户端的 respawn 包
+        // 尚未发送，payload 会先到客户端写入旧玩家实体，重生重建后丢失。
+        // 改由 onPlayerRespawn（respawn 包发出后）延迟 1 tick 同步。
+    }
+
+    /**
+     * 死亡重生完成后重新同步等级数据到客户端。
+     * PlayerRespawnEvent 在客户端 respawn 包发送之后触发，再延迟 1 tick 执行，
+     * 确保客户端玩家实体已重建完成，HUD 立即恢复（配合 GuiMixin 防止原版爱心血条
+     * 在同步前因超高血量渲染海量爱心导致卡顿）。
+     */
+    @SubscribeEvent
+    public void onPlayerRespawn(PlayerEvent.PlayerRespawnEvent event) {
+        Player player = event.getEntity();
+        if (player.level().isClientSide) return;
+        SoulGrowth.applyHealth(player);
+        SoulGrowth.applyAttack(player);
+        if (player.getServer() != null) {
+            player.getServer().execute(() -> syncLevelDataToClient(player));
+        }
     }
 
     @SubscribeEvent
@@ -123,8 +153,28 @@ public class All_spirit_continent {
         // 重算血量/攻击力加成（重进世界后 transient 修饰符已丢失，按存档数据恢复）
         SoulGrowth.applyHealth(event.getEntity());
         SoulGrowth.applyAttack(event.getEntity());
+        // 重新登录补满血量：NBT 加载阶段血量修饰符尚未应用（基础上限 20），
+        // 存档血量（如 100w）会被原版钳制为 20，属性恢复后当前血量已失真，需补满。
+        // 跨维度传送不重建玩家实体、不重新加载 NBT，不受此问题影响。
+        if (event.getEntity().getData(ModAttachments.PLAYER_LEVEL_DATA).isActivated()) {
+            event.getEntity().setHealth(event.getEntity().getMaxHealth());
+        }
         // 同步等级数据到客户端（确保重进后 HUD 正确显示）
         syncLevelDataToClient(event.getEntity());
+    }
+
+    /**
+     * 玩家跨维度传送（如主世界→暮色森林）后保持等级/魂环/加成不丢失：
+     * 客户端玩家实体跨维度时会重建，attachment 需重新下发；
+     * transient 属性修饰符也一并重算（服务端实体重建场景保险）。
+     */
+    @SubscribeEvent
+    public void onPlayerChangedDimension(PlayerEvent.PlayerChangedDimensionEvent event) {
+        Player player = event.getEntity();
+        if (player.level().isClientSide) return;
+        SoulGrowth.applyHealth(player);
+        SoulGrowth.applyAttack(player);
+        syncLevelDataToClient(player);
     }
 
     /**
@@ -168,6 +218,8 @@ public class All_spirit_continent {
                                 .executes(ctx -> setFengHao(ctx.getSource(),
                                         StringArgumentType.getString(ctx, "name"))))
         );
+        // V6.0 魂技社区共享系统 /douluo 指令
+        org.fanajing.all_spirit_continent.command.DouluoCommand.register(event);
     }
 
     /** /fh 无参数：显示当前封号与用法 */

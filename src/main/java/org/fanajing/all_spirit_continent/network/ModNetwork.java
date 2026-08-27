@@ -67,6 +67,13 @@ public class ModNetwork {
                 ConfirmRingAbsorbPayload::handleServer
         );
 
+        // V6.0 客户端 → 服务端：释放魂技（开武魂 + 技能键 R）
+        registrar.playToServer(
+                CastSkillPayload.TYPE,
+                CastSkillPayload.STREAM_CODEC,
+                CastSkillPayload::handleServer
+        );
+
         // 客户端 → 服务端：增减等级（调试棒增减等级模式左键触发）
         registrar.playToServer(
                 AdjustLevelPayload.TYPE,
