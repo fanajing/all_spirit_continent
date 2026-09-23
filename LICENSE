@@ -22,15 +22,289 @@ SOFTWARE.
 
 ---
 
-NOTICE REGARDING FAN-MADE CONTENT:
+================================================================================
+COMPREHENSIVE FAN-MADE / IP DISCLAIMER (宇宙级免责声明)
+================================================================================
 
-This software is an unofficial fan-made Minecraft mod inspired by the
-"Soul Land / 斗罗大陆" intellectual property created by Tang Jia San Shao.
-This project is NOT affiliated with, endorsed by, or sponsored by the
-original IP holders or any official publishers. All character names,
-plot elements, and mechanism names referenced in the mod are derivative
-works based on the public-facing worldview; the mod itself contains no
-original narrative content from the source material.
+This section constitutes a comprehensive disclaimer addressing all known
+intellectual property, legal, privacy, technical, and user-responsibility
+concerns related to the Software. By downloading, installing, distributing,
+or otherwise using the Software, you acknowledge and agree to every term
+below.
 
-If you are a rights holder and have concerns about this derivative work,
-please contact the author for prompt resolution.
+--------------------------------------------------------------------------------
+§1. INTELLECTUAL PROPERTY / TRADEMARK / COPYRIGHT NON-AFFILIATION
+--------------------------------------------------------------------------------
+
+The Software is an UNOFFICIAL, NON-COMMERCIAL fan tribute derivative work
+inspired by the worldview publicly known as "Soul Land / 斗罗大陆" /
+"Douluo Dalu", a series of novels and derivative media created by the
+original author Tang Jia San Shao (hereinafter referred to as the
+"Original Author") and associated publishers and rights holders
+(collectively, the "Rights Holders").
+
+(a) NO AFFILIATION. The Software is NOT affiliated with, sponsored by,
+    endorsed by, authorized by, or in any way associated with the
+    Original Author or any of the Rights Holders. No actual partnership,
+    joint venture, employment, agency, or contractual relationship exists
+    between the author of this Software ("Author") and any Rights Holder.
+
+(b) TRADEMARK DISCLAIMER. All trademarks, service marks, trade names,
+    logos, character names, place names, sect names, skill names, and
+    similar identifiers that may appear in the Software's text data,
+    configuration defaults, debug logs, or AI-generated content
+    (collectively, "Marked Terms") are the property of their respective
+    owners, including but not limited to the Original Author and the
+    Rights Holders. The Author disclaims any proprietary interest in such
+    Marked Terms. Use of these Marked Terms is for descriptive /
+    referential purposes only (i.e., nominative fair use) and does not
+    imply endorsement of or by the Rights Holders.
+
+(c) NO ORIGINAL EXPRESSION REPRODUCED. The Software contains NO original
+    prose, dialogue, plot, scenes, illustrations, photographs, audio
+    recordings, or other expressive copyrightable content from the
+    Original Work. All in-game content (spirit beasts, rings, skills,
+    mechanisms, items, models, textures, language strings) is either:
+       (1) Original code / art created by the Author and released under MIT;
+       (2) Generated algorithmically by third-party AI services at runtime;
+       (3) Common gameplay / cultural concepts (e.g., "ring of years",
+           "soul skill") that exist in many works and the public domain.
+
+(d) WORLDVIEW vs. EXPRESSION. The Software draws only upon the broadest,
+    publicly-known "worldview" / "setting" elements (the so-called
+    "ideas" / "scènes à faire" level), which by general legal consensus
+    are not protected by copyright. No protectable "expression" is
+    reproduced. Where Marked Terms appear in the Software, they refer to
+    generic gameplay categories (e.g., a "spirit ring" item type) and
+    not to any specific copyrighted scene, character, or storyline.
+
+(e) DISCLAIMER OF ORIGINALITY. The Author makes no representation that
+    the Software is an original work unrelated to the Original Work;
+    it is, by its very nature, a derivative fan work, and is presented
+    as such.
+
+--------------------------------------------------------------------------------
+§2. NO WARRANTY / AS-IS / LIMITATION OF LIABILITY (extends §15-§18 of MIT)
+--------------------------------------------------------------------------------
+
+(a) AS-IS / NO WARRANTY. THE SOFTWARE IS PROVIDED "AS IS" AND "AS
+    AVAILABLE", WITHOUT WARRANTY OF ANY KIND, EXPRESS, IMPLIED, OR
+    STATUTORY, INCLUDING WITHOUT LIMITATION WARRANTIES OF MERCHANTABILITY,
+    FITNESS FOR A PARTICULAR PURPOSE, NON-INFRINGEMENT, OR THAT THE
+    SOFTWARE WILL BE UNINTERRUPTED, ERROR-FREE, OR FREE OF HARMFUL
+    COMPONENTS.
+
+(b) NO LIABILITY. TO THE MAXIMUM EXTENT PERMITTED BY APPLICABLE LAW,
+    IN NO EVENT SHALL THE AUTHOR, CONTRIBUTORS, OR RIGHTS HOLDERS OF
+    THE MIT LICENSE BE LIABLE FOR ANY CLAIM, DAMAGES, OR OTHER
+    LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT (INCLUDING
+    NEGLIGENCE), STRICT LIABILITY, OR OTHERWISE, ARISING FROM, OUT OF,
+    OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
+    IN THE SOFTWARE.
+
+(c) USER ASSUMES RISK. The user assumes all risk of using the Software,
+    including but not limited to risk of: data loss, world corruption,
+    mod compatibility breakage, server crashes, unintended gameplay
+    consequences, regulatory non-compliance in their jurisdiction, and
+    any claims by third parties (including Rights Holders) arising from
+    the user's particular use.
+
+--------------------------------------------------------------------------------
+§3. COMPLIANCE WITH PLATFORM EULAs
+--------------------------------------------------------------------------------
+
+(a) MOJANG / MICROSOFT. The Software is a third-party modification for
+    Minecraft, a product of Mojang Studios / Microsoft Corporation.
+    By using the Software, you confirm you have read and agreed to:
+       - the Minecraft End User License Agreement
+         (https://aka.ms/MinecraftEULA);
+       - the Microsoft Services Agreement;
+       - the Microsoft Privacy Statement.
+    The Software is not endorsed by or affiliated with Mojang or
+    Microsoft.
+
+(b) NEOFORGE / FORGE. The Software depends on NeoForge, distributed
+    under the LGPL. The Author complies with NeoForge's license terms
+    by ensuring the Software is a separately-distributed work that
+    dynamically links to NeoForge at runtime. Users are responsible
+    for complying with NeoForge's license when redistributing the
+    Software together with NeoForge.
+
+(c) OTHER MODS. The Software may interoperate with other third-party
+    mods via Mixin injection or data-driven configuration. The Author
+    is not responsible for compatibility, breakage, or conflicts with
+    any other mod, and inclusion of any third-party mod compatibility
+    does not imply endorsement.
+
+--------------------------------------------------------------------------------
+§4. AI-GENERATED CONTENT DISCLAIMER
+--------------------------------------------------------------------------------
+
+(a) GENERATIVE AI. The Software integrates with third-party generative
+    AI services (currently DeepSeek / OpenAI-compatible APIs) to
+    dynamically generate in-game content such as skill descriptions,
+    primitive compositions, and parameter values at runtime.
+
+(b) NO OWNERSHIP CLAIM. The Author does not claim authorship or
+    ownership of any specific AI-generated output. Such output is
+    governed by the terms of the respective AI service provider.
+
+(c) CONTENT SAFETY. Although the Software includes an anomaly detector
+    (SkillAnomalyDetector) that filters for forbidden keywords, numerical
+    overflow, instant-kill patterns, and other abuse vectors, the
+    Author does NOT warrant that AI-generated content is free of
+    offensive, inappropriate, copyrighted-suggestive, or otherwise
+    objectionable content.
+
+(d) API KEY RESPONSIBILITY. The Author is not responsible for any
+    charges, rate limits, account suspensions, or breaches of the AI
+    provider's terms resulting from use of the Software. Users are
+    responsible for their own API keys, usage, and compliance with
+    the AI provider's terms of service.
+
+--------------------------------------------------------------------------------
+§5. CLOUD SERVICE / NETWORK / DATA DISCLAIMER
+--------------------------------------------------------------------------------
+
+(a) THIRD-PARTY CLOUD. The Software optionally syncs user-generated
+    content (skill data) to a third-party cloud storage service
+    (currently Aliyun OSS, https://www.aliyun.com/product/oss). This
+    service is provided by Alibaba Cloud. The Author is not
+    responsible for the availability, security, privacy, or terms of
+    this third-party service.
+
+(b) DATA COLLECTED. The Software transmits only:
+       - anonymized uploader hash (cryptographic hash of player UUID);
+       - in-game player name (as configured by the user);
+       - skill data (name, description, execution steps) created by the
+         user or generated by the AI on their behalf.
+    The Software does NOT transmit: real names, email addresses,
+    physical addresses, payment information, IP addresses (beyond what
+    the underlying HTTP layer necessarily exposes to the cloud
+    provider), or any other personally identifiable information beyond
+    the in-game name.
+
+(c) NO CENTRAL ACCOUNT. The Software does not require users to create
+    an account with the Author. All data sent to the cloud is
+    anonymous-by-design and tied only to a cryptographic hash.
+
+(d) USER RESPONSIBILITY. Server administrators are responsible for:
+       - informing their players of what data is transmitted;
+       - obtaining any necessary consent under GDPR / CCPA / applicable
+         privacy laws;
+       - configuring the Software's cloud sync features in accordance
+         with their jurisdiction's requirements.
+
+(e) OFFLINE OPERATION. The Software is fully usable in "OFFLINE" mode
+    (no cloud sync, no AI calls). All core gameplay functions work
+    without any network connectivity.
+
+--------------------------------------------------------------------------------
+§6. NO COMMERCIAL USE
+--------------------------------------------------------------------------------
+
+The Software is provided free of charge for personal, educational,
+non-commercial use. The Author does not sell, license-for-fee, or
+otherwise commercially exploit the Software itself.
+
+(a) MODPACKS. Inclusion of the Software in freely-distributed modpacks
+    is permitted under the MIT license. Modpacks that include the
+    Software MAY be sold, provided the Software's authorship and LICENSE
+    are clearly credited and no warranty is implied by the modpack author.
+
+(b) NO PAYWALLING. The Software itself MUST NOT be sold, paywalled,
+    locked behind a donation, or otherwise used as a vehicle for direct
+    monetization. (Donations to the Author are appreciated but unrelated
+    to the Software's license.)
+
+--------------------------------------------------------------------------------
+§7. INTERNATIONAL / JURISDICTIONAL COMPLIANCE
+--------------------------------------------------------------------------------
+
+(a) GLOBAL PUBLICATION. The Software is published globally via GitHub.
+
+(b) USER RESPONSIBILITY. Users are solely responsible for ensuring
+    their use of the Software complies with the laws and regulations
+    of their jurisdiction, including but not limited to:
+       - copyright and intellectual property law;
+       - import / export control laws;
+       - content regulation laws (e.g., age ratings, content
+         classification);
+       - privacy and data protection laws (GDPR, CCPA, PIPL, etc.);
+       - AI / algorithmic content regulation laws in the user's
+         jurisdiction.
+
+(c) NO LEGAL ADVICE. Nothing in this disclaimer constitutes legal
+    advice. Users requiring legal certainty should consult a qualified
+    legal professional in their jurisdiction.
+
+--------------------------------------------------------------------------------
+§8. TAKEDOWN / DMCA / RIGHTS-HOLDER CONTACT POLICY
+--------------------------------------------------------------------------------
+
+(a) RIGHTS HOLDER FAST-TRACK. If you are a Rights Holder (or an
+    authorized representative of a Rights Holder) and believe the
+    Software infringes your intellectual property rights, please
+    contact the Author via:
+       - GitHub Issue: https://github.com/fanajing/all_spirit_continent/issues
+       - GitHub DMCA: follow the GitHub DMCA takedown process
+       - Repository contact link (see repository's About / Sponsor area)
+
+(b) RESPONSE TIME. The Author commits to:
+       - Acknowledge receipt within 7 calendar days;
+       - Investigate and provide an initial response within 14 calendar
+         days;
+       - Take down or modify the offending content within 30 calendar
+         days if the Author agrees to the takedown.
+
+(d) NO RETALIATION. Good-faith takedown requests will not result in
+    retaliation against the requester. The Author reserves all rights
+    and defenses in response to bad-faith or abusive requests.
+
+--------------------------------------------------------------------------------
+§9. USER CONDUCT
+--------------------------------------------------------------------------------
+
+Users agree NOT to use the Software to:
+   - generate, upload, or distribute content that infringes third-party
+     intellectual property rights;
+   - harass, defame, or harm other users;
+   - circumvent, hack, or exploit other servers or users;
+   - generate content that is illegal under the user's jurisdiction;
+   - circumvent rate limits, safety filters, or other protective
+     measures built into the Software or its dependencies.
+
+The Author reserves the right to ban specific uploader hashes from the
+public cloud skill library for violations of the above.
+
+--------------------------------------------------------------------------------
+§10. SEVERABILITY / ENTIRE AGREEMENT
+--------------------------------------------------------------------------------
+
+(a) SEVERABILITY. If any provision of this disclaimer is held by a
+    court of competent jurisdiction to be invalid, illegal, or
+    unenforceable, the remaining provisions shall continue in full
+    force and effect.
+
+(b) ENTIRE AGREEMENT. The MIT License text (lines 1-21 above), this
+    Comprehensive Disclaimer (§1-§10), and any README / NOTICE files
+    shipped with the Software together constitute the entire agreement
+    between the Author and the user regarding the Software, superseding
+    any prior agreements or representations.
+
+(c) UPDATES. The Author may update this disclaimer at any time.
+    Material updates will be reflected in the Software's release notes
+    and changelog. Continued use of the Software after an update
+    constitutes acceptance of the updated terms.
+
+--------------------------------------------------------------------------------
+§11. CONTACT
+--------------------------------------------------------------------------------
+
+For any questions, concerns, or takedown requests:
+   - GitHub: https://github.com/fanajing/all_spirit_continent
+   - Issues: https://github.com/fanajing/all_spirit_continent/issues
+
+================================================================================
+END OF COMPREHENSIVE DISCLAIMER
+================================================================================

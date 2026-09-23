@@ -25,7 +25,7 @@
 
 <br>
 
-[**✨ 功能特性**](#-功能特性) · [**🎮 核心玩法**](#-核心玩法) · [**🛠 技术架构**](#-技术架构) · [**📦 安装**](#-安装) · [**⚙️ 配置**](#-配置) · [**🤝 贡献**](#-贡献) · [**📄 协议**](#-协议)
+[**✨ 功能特性**](#-功能特性) · [**🎮 核心玩法**](#-核心玩法) · [**🛠 技术架构**](#-技术架构) · [**📦 安装**](#-安装) · [**⚙️ 配置**](#-配置) · [**🤝 贡献**](#-贡献) · [**📄 协议与免责声明**](#-协议与免责声明)
 
 </div>
 
@@ -39,9 +39,27 @@
 
 从 V5.0 基线到 V6.2 当前版本，作者独立完成了从机制设计、规则引擎、网络同步到云端 AI 推演的全部工作，所有规则均由代码定义——**代码即规则权威**。
 
-> **🎨 IP 声明**
+> **⚠️ 宇宙级免责声明 / COMPREHENSIVE DISCLAIMER（必读）**
 >
-> 本模组为斗罗大陆 IP 的**粉丝致敬**作品，所有角色、机制设定均为基于原作世界观的二次创作。模组内不包含任何原作剧情、人物名称或美术资源；与原作方无任何官方关联。如有侵权疑虑请联系作者处理。
+> 本模组为**非官方、非商业、粉丝致敬**性质的二创作品，灵感来源于**"斗罗大陆 / Soul Land"** 世界观（原作：唐家三少）。
+>
+> **本模组与原作方、原作者、出版方、任何官方机构均无任何关联、授权、赞助、合作或背书关系。** 模组内不包含任何原作剧情、台词、人物形象、美术资源；仅借鉴最宽泛的"世界观/玩法概念"层面（属于公有领域/不受保护的"思想"范畴）。所有在游戏中出现的名称均为通用玩法类别（如"魂环"指代一种游戏物品类型），不指向任何具体版权表达场景。
+>
+> 完整免责声明见 [`LICENSE`](./LICENSE) 文件，含 **11 章 40+ 条**条款，覆盖：
+>
+> 1. 商标 / 著作权 / 联属关系否认
+> 2. 无担保 / As-Is / 风险自担
+> 3. Mojang / NeoForge / 其他模组 EULA 合规
+> 4. AI 生成内容免责声明
+> 5. 云服务 / 网络 / 数据隐私声明
+> 6. 非商用 / Modpack 政策
+> 7. 跨国司法管辖区合规责任
+> 8. 权利人下架申请通道（**承诺 7 日内确认 / 14 日内回复 / 30 日内处理**）
+> 9. 用户行为守则
+> 10. 可分割性 / 完整协议 / 条款更新
+> 11. 联系方式
+>
+> **下载、安装、传播本模组即代表您已阅读、知悉并接受上述全部条款。** 若您不同意任何条款，请立即停止使用并删除本模组的所有副本。
 
 ---
 
@@ -350,9 +368,11 @@ src/main/java/org/fanajing/all_spirit_continent/
 
 ---
 
-## 📄 协议
+## 📄 协议与免责声明
 
-本项目基于 **MIT License** 开源发布 — 详见 [`LICENSE`](./LICENSE) 文件。
+### 主协议：MIT License
+
+本项目代码部分基于 **MIT License** 开源发布 — 详见 [`LICENSE`](./LICENSE) 文件 §MIT 主体段（1-21 行）。
 
 ```
 MIT License
@@ -369,10 +389,47 @@ furnished to do so, subject to the following conditions:
 The above copyright notice and this permission notice shall be included in all
 copies or substantial portions of the Software.
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND...
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
 ```
 
-> ⚠️ **再次提示**：本模组为斗罗大陆 IP 粉丝致敬作品，所有角色与剧情均为基于原作的二次创作，与原作方无官方合作关系。
+### 宇宙级免责声明（必读）
+
+[`LICENSE`](./LICENSE) 文件 §COMPREHENSIVE FAN-MADE / IP DISCLAIMER（共 **11 章 40+ 条**）构成本项目的完整免责声明，与 MIT 主体段具有同等法律效力。要点速查：
+
+| § | 主题 | 关键承诺 / 否认 |
+|:---:|:---|:---|
+| §1 | 商标 / 著作权 / 联属关系 | 非官方、非商业、非授权、非赞助、非合作；仅借鉴"思想/世界观"层面 |
+| §2 | 无担保 / As-Is | 软件按"现状"提供，风险全部由用户承担 |
+| §3 | 平台 EULA 合规 | 用户须遵守 Mojang EULA、NeoForge LGPL、其他模组协议 |
+| §4 | AI 生成内容 | 不主张 AI 输出所有权；用户自负 API 责任；不保证内容无害 |
+| §5 | 云服务 / 数据 | 仅上传匿名哈希、玩家名、技能数据；不收集实名信息；运营者自负告知义务 |
+| §6 | 非商用 | 软件本体不得售卖/付费墙；可自由打包进 Modpack（须署名）|
+| §7 | 跨国合规 | 用户自负本国法律合规（GDPR / CCPA / PIPL / 内容分级等）|
+| §8 | 权利人下架通道 | **7 日确认 / 14 日回复 / 30 日处理**；不打击善意投诉 |
+| §9 | 用户守则 | 禁侵权 / 骚扰 / 黑客 / 违法内容 / 绕过安全机制 |
+| §10 | 可分割性 / 完整协议 | 单条无效不影响其余条款 |
+| §11 | 联系 | [GitHub Issues](https://github.com/fanajing/all_spirit_continent/issues) |
+
+### 🔁 终极条款
+
+> 通过下载、安装、再分发、传播或以其他任何方式使用本模组，您确认已**完整阅读、知悉并接受 [`LICENSE`](./LICENSE) 全部内容**。如不同意任何条款，请**立即停止使用并删除本模组的全部副本**。
+
+### 📚 二次创作的法律边界说明（科普）
+
+| 范畴 | 是否受版权保护 | 本模组的处理 |
+|:---|:---:|:---|
+| "思想" / 世界观 / 玩法概念 / 通用术语 | ❌ 不保护 | ✔ 借鉴 |
+| 通用"场景元素"（scènes à faire，如"学院"、"魂环等级"） | ❌ 通常不保护 | ✔ 使用 |
+| 具体剧情 / 人物姓名 / 形象 / 台词 / 美术 | ✔ 保护 | ✘ **不使用** |
+| 商标 / 服务标记 | ✔ 保护 | 仅作指称性合理使用 |
+
+> 本表仅为常识性科普，**不构成法律意见**。如有具体侵权疑虑，请通过 §8 通道联系作者。
 
 ---
 
@@ -396,7 +453,7 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND...
 
 **Made with ❤️ by [fanajing](https://github.com/fanajing)**
 
-<sub>MIT License · Copyright © 2025 fanajing · All Spirit Continent is an unofficial fan-made mod, not affiliated with the original IP holders.</sub>
+<sub>MIT License · Copyright © 2025 fanajing · 全部免责声明见 [`LICENSE`](./LICENSE) · 本模组为非官方粉丝致敬作品，与原作方无任何关联、授权、赞助、合作或背书关系。</sub>
 
 <br>
 
