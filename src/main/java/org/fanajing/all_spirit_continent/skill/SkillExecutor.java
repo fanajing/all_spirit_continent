@@ -113,6 +113,20 @@ public class SkillExecutor {
         return CastResult.SUCCESS;
     }
 
+    /**
+     * 应用融合被动步骤（手持武魂时由 PassiveSkillHandler 周期性调用）。
+     * 仅执行被动白名单原语，始终作用于施法者自身，不消耗精神力、不触发冷却。
+     */
+    public static void applyPassive(ServerPlayer caster, ExecutionStep step) {
+        SkillPrimitive p = SkillPrimitive.byName(step.primitive());
+        if (p == null || !SkillPrimitive.isPassiveAllowed(p)) return;
+        try {
+            executeStep(caster.serverLevel(), caster, step, caster, 1.0);
+        } catch (Exception e) {
+            LOGGER.warn("执行被动原语 {} 出错: {}", step.primitive(), e.getMessage());
+        }
+    }
+
     /** 估算魂技精神力消耗：原语数 × 5 + 冷却秒数 × 0.5（保底 5） */
     public static float estimatedCost(SkillData skill) {
         int steps = skill.execution() == null ? 0 : skill.execution().size();
@@ -194,11 +208,18 @@ public class SkillExecutor {
                 hurt(caster, target, value(params, 4.0) * 1.2 * damageMult, 0, dmgType(params), level);
             }
             case EXECUTE -> {
+                // §13.7.2 + §7.5：EXECUTE 双语义 = 斩杀阈值 + 伤害基准
+                // 斩杀阈值 = value × EXECUTE_KILL_THRESHOLD_MULTIPLIER (=2.0)
+                // 血量 ≤ 阈值 → 斩杀分支伤害 = value × EXECUTE_KILL_DAMAGE_MULTIPLIER (=4.0) × 年限倍率
+                // 血量 > 阈值 → 普通分支伤害 = value × EXECUTE_NORMAL_DAMAGE_MULTIPLIER (=1.0) × 年限倍率
+                // raw value 推荐取目标满血的 1%~2%，使斩杀线 ≈ 满血 2%~4%。
                 double threshold = value(params, 5.0);
-                if (target instanceof LivingEntity le && le.getHealth() <= threshold * 2.0) {
-                    hurt(caster, target, value(params, 5.0) * 4.0 * damageMult, 0.2, dmgType(params), level);
+                if (target instanceof LivingEntity le && le.getHealth() <= threshold * SkillData.EXECUTE_KILL_THRESHOLD_MULTIPLIER) {
+                    hurt(caster, target, value(params, 5.0) * SkillData.EXECUTE_KILL_DAMAGE_MULTIPLIER * damageMult,
+                            0.2, dmgType(params), level);
                 } else {
-                    hurt(caster, target, value(params, 5.0) * damageMult, 0.1, dmgType(params), level);
+                    hurt(caster, target, value(params, 5.0) * SkillData.EXECUTE_NORMAL_DAMAGE_MULTIPLIER * damageMult,
+                            0.1, dmgType(params), level);
                 }
             }
             case STUN -> {
@@ -282,6 +303,9 @@ public class SkillExecutor {
                 } else {
                     target.setRemainingFireTicks(ticks);
                 }
+                // 火焰表现走降级链：整合包若有灵魂火/地狱火系 mod 粒子则自动采用
+                particles(level, caster, org.fanajing.all_spirit_continent.skill.engine.ResourceResolver
+                        .particleFor(org.fanajing.all_spirit_continent.skill.engine.ResourceResolver.SemanticKind.FIRE), 15);
             }
             case SOUND -> playSound(level, caster, str(params, "sound", "minecraft:entity.generic.explode"));
             case PARTICLE -> spawnParticles(level, caster, params);
@@ -497,19 +521,18 @@ public class SkillExecutor {
 
     /** 音效 */
     private static void playSound(ServerLevel level, ServerPlayer caster, String soundId) {
-        var sound = BuiltInRegistries.SOUND_EVENT.get(ResourceLocation.tryParse(soundId));
-        if (sound != null) {
-            level.playSound(null, caster.blockPosition(), sound, SoundSource.PLAYERS, 1.0F, 1.0F);
-        }
+        // 表现资源降级链（§9）：无效/未安装 mod 的音效 ID 自动降级为语义近似音效
+        var sound = org.fanajing.all_spirit_continent.skill.engine.ResourceResolver.resolveSound(soundId);
+        level.playSound(null, caster.blockPosition(), sound, SoundSource.PLAYERS, 1.0F, 1.0F);
     }
 
     /** 粒子 */
     private static void spawnParticles(ServerLevel level, ServerPlayer caster, Map<String, Object> params) {
         String id = str(params, Param.PARTICLE.key(), "minecraft:flame");
-        var type = BuiltInRegistries.PARTICLE_TYPE.get(ResourceLocation.tryParse(id));
-        if (type == null) return;
+        // 表现资源降级链（§9）：无效/未安装 mod 的粒子 ID 自动降级为语义近似粒子
+        var type = org.fanajing.all_spirit_continent.skill.engine.ResourceResolver.resolveParticle(id);
         int count = count(params, 12);
-        particles(level, caster, (net.minecraft.core.particles.ParticleOptions) type, count);
+        particles(level, caster, type, count);
     }
 
     /** 传送（SELF→自身按朝向位移；TARGET→目标朝施法者位移） */

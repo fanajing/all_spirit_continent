@@ -11,8 +11,11 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.storage.LevelResource;
 import net.neoforged.fml.ModList;
 import org.fanajing.all_spirit_continent.config.CloudConfig;
+import org.fanajing.all_spirit_continent.config.ModConfig;
 import org.fanajing.all_spirit_continent.skill.RatingStats;
 import org.fanajing.all_spirit_continent.skill.SkillEntry;
+import org.fanajing.all_spirit_continent.skill.engine.SkillAnomalyDetector;
+import org.fanajing.all_spirit_continent.skill.engine.SkillValidator;
 import org.slf4j.Logger;
 
 import java.io.IOException;
@@ -83,6 +86,19 @@ public class CloudSyncService {
         // 先读本地离线快照，保证服务端启动即可离线查询
         EXECUTOR.submit(() -> {
             loadSnapshot();
+            // §9.8：服务端启动时异步扫描 mods 内 data/<modid>/skills/*.json（数据驱动）
+            try {
+                var scanner = new org.fanajing.all_spirit_continent.skill.engine.ModResourceScanner();
+                List<SkillEntry> modSkills = scanner.loadSnapshot();
+                if (modSkills.isEmpty()) {
+                    modSkills = scanner.scanAndLoad();
+                }
+                if (!modSkills.isEmpty()) {
+                    addModProvidedSkills(modSkills);
+                }
+            } catch (Exception e) {
+                LOGGER.warn("mod 数据驱动扫描失败（不影响云端同步）: {}", e.getClass().getSimpleName());
+            }
             pullAll();
         });
         int interval = Math.max(30, CloudConfig.SYNC_INTERVAL_SECONDS.get());
@@ -111,6 +127,19 @@ public class CloudSyncService {
     private static void syncCycle() {
         pullIncremental();
         if (!localOverrides.isEmpty()) flush();
+    }
+
+    /**
+     * 当前是否允许向云端上传本地改动（§13.3.4：服务端必须提供「关闭上传」开关）。
+     * 默认 true（开启上传）；ModConfig.ENABLE_CLOUD_UPLOAD=false 时所有写请求都被拦截。
+     */
+    public static boolean isUploadEnabled() {
+        try {
+            return ModConfig.ENABLE_CLOUD_UPLOAD.get();
+        } catch (Exception e) {
+            // 配置未加载（极早期调用）→ 视作禁用，保守策略
+            return false;
+        }
     }
 
     private static void pullAll() {
@@ -190,6 +219,11 @@ public class CloudSyncService {
     /** 写回：读最新云端 → 合并本地改动 → PUT（读-改-写回降低并发覆盖） */
     private static void flush() {
         if (currentLevel == null || localOverrides.isEmpty()) return;
+        // §13.3.4：服务端总开关关闭时直接跳过所有写操作
+        if (!isUploadEnabled()) {
+            lastWriteStatus = "跳过：" + localOverrides.size() + " 条本地改动保留在内存（配置 enableCloudUpload=false）";
+            return;
+        }
         OssClient oss = OssClient.fromConfig();
         if (!oss.canWrite()) {
             LOGGER.warn("无法写回云端：未配置 OSS AccessKey（{} 条本地改动保留在内存）", localOverrides.size());
@@ -206,6 +240,14 @@ public class CloudSyncService {
                 }
             }
             merged.putAll(localOverrides);
+
+            // §13.4.2：写回前剔除黑名单条目（防止本地误入黑名单后又重新上传）
+            int beforeBlackCount = merged.size();
+            merged.entrySet().removeIf(e -> SkillBlacklist.contains(e.getKey()));
+            int blackFiltered = beforeBlackCount - merged.size();
+            if (blackFiltered > 0) {
+                LOGGER.info("写回剔除黑名单条目: {} 条", blackFiltered);
+            }
 
             long nowTicks = currentLevel.getGameTime();
             JsonArray array = new JsonArray();
@@ -239,6 +281,33 @@ public class CloudSyncService {
     /** 当前 OSS 是否可写（供 status 诊断） */
     public static boolean ossWritable() {
         return OssClient.fromConfig().canWrite();
+    }
+
+    /**
+     * §9.8：把 mod 数据驱动扫描得到的魂技合并进内存缓存（本地优先，不写回云端）。
+     * <p>语义与 queueSkill 不同：
+     * <ul>
+     *   <li>队列里的条目会上传云端（用于玩家评分/上传）</li>
+     *   <li>mod 提供的条目只入本地缓存（已"自带"，无需上传）</li>
+     * </ul>
+     */
+    public static void addModProvidedSkills(List<SkillEntry> modSkills) {
+        if (modSkills == null || modSkills.isEmpty()) return;
+        Map<String, SkillEntry> merged = new HashMap<>();
+        for (SkillEntry e : cachedSkills) merged.put(e.uuid(), e);
+        for (SkillEntry e : modSkills) {
+            if (SkillBlacklist.contains(e.uuid())) continue;
+            // 本地优先：已有同 uuid 缓存（云端/玩家上传）则保留
+            merged.putIfAbsent(e.uuid(), e);
+        }
+        cachedSkills = List.copyOf(merged.values());
+        LOGGER.info("mod 数据驱动魂技已合并: 新增 {} 条（不写回云端）",
+                modSkills.stream().filter(e -> !SkillBlacklist.contains(e.uuid())).count());
+    }
+
+    /** 当前本地黑名单条数（诊断） */
+    public static int blacklistSize() {
+        return SkillBlacklist.size();
     }
 
     /** 最近一次写回结果（供 status 诊断） */
@@ -291,8 +360,64 @@ public class CloudSyncService {
     /** 新增/更新一条魂技（上传/推演结果入本地库并排队写回） */
     public static void queueSkill(SkillEntry entry) {
         if (entry == null) return;
+        // §13.4.2：异常检测拦截（关键词/禁组合必查；数值检查需要满血，由推演链路传）
+        SkillAnomalyDetector.Result r = SkillAnomalyDetector.detect(entry.skill(), 0f);
+        if (r.anomalous()) {
+            SkillBlacklist.add(entry.uuid(), r.reason());
+            LOGGER.warn("魂技被异常检测拦截: uuid={}, name={}, 原因={}",
+                    entry.uuid(), entry.skill().name(), r.reason());
+            lastWriteStatus = "异常拦截：" + entry.skill().name() + " (" + r.reason() + ")";
+            return;
+        }
+        // 已命中黑名单的 uuid 直接拒绝入库（防御上传/推演结果绕过检测的可能）
+        if (SkillBlacklist.contains(entry.uuid())) {
+            lastWriteStatus = "已黑名单：拒绝 uuid=" + entry.uuid();
+            return;
+        }
         localOverrides.put(entry.uuid(), entry);
-        scheduleFlush();
+        // §13.3.4：上传关闭时仍保留本地改动（内存与本地快照）但不发起写请求
+        if (isUploadEnabled()) {
+            scheduleFlush();
+        } else {
+            lastWriteStatus = "离线保留：1 条魂技已入本地库（配置 enableCloudUpload=false，不上传云端）";
+        }
+    }
+
+    /**
+     * §6.4 批量上传：一次提交多条进入本地变更缓冲并合并调度一次 flush，
+     * 避免每条单独触发 scheduleFlush → 减少调度次数与 OSS PUT 频率。
+     * <p>
+     * 异常检测与黑名单规则与 {@link #queueSkill} 一致；
+     * 若全部被拦截或命中黑名单，本次批量调用不会有任何写入（lastWriteStatus 会被覆盖为最后一次拦截原因）。
+     */
+    public static int queueSkillBatch(java.util.List<SkillEntry> entries) {
+        if (entries == null || entries.isEmpty()) return 0;
+        int accepted = 0;
+        for (SkillEntry entry : entries) {
+            if (entry == null) continue;
+            SkillAnomalyDetector.Result r = SkillAnomalyDetector.detect(entry.skill(), 0f);
+            if (r.anomalous()) {
+                SkillBlacklist.add(entry.uuid(), r.reason());
+                lastWriteStatus = "异常拦截（批量）：" + entry.skill().name() + " (" + r.reason() + ")";
+                continue;
+            }
+            if (SkillBlacklist.contains(entry.uuid())) {
+                lastWriteStatus = "已黑名单（批量）：拒绝 uuid=" + entry.uuid();
+                continue;
+            }
+            localOverrides.put(entry.uuid(), entry);
+            accepted++;
+        }
+        if (accepted == 0) {
+            lastWriteStatus = "批量上传：全部被拦截，未写入（详见类通知）";
+            return 0;
+        }
+        if (isUploadEnabled()) {
+            scheduleFlush();
+        } else {
+            lastWriteStatus = "离线保留（批量）：" + accepted + " 条已入本地库（配置 enableCloudUpload=false）";
+        }
+        return accepted;
     }
 
     /** 更新某条魂技的评分统计（评分/撤回后调用），池随评分重算 */
@@ -303,7 +428,11 @@ public class CloudSyncService {
         String pool = stats.determinePool(nowTicks);
         SkillEntry updated = new SkillEntry(existing.skill(), pool, stats, existing.uploaderHash(), existing.uploaderName());
         localOverrides.put(uuid, updated);
-        scheduleFlush();
+        if (isUploadEnabled()) {
+            scheduleFlush();
+        } else {
+            lastWriteStatus = "离线保留：1 条评分已写入本地（配置 enableCloudUpload=false，不上传云端）";
+        }
     }
 
     /**
@@ -330,17 +459,33 @@ public class CloudSyncService {
                 && (segment == null || segment.isEmpty() || c.equals(segment));
     }
 
-    /** 解析云端条目；filterByInstalledMods=true 时丢弃「依赖未安装 mod」的条目 */
+    /**
+     * 解析云端条目；filterByInstalledMods=true 时丢弃「依赖未安装 mod」的条目。
+     * <p>引擎 P0 决策：无合法签名机制（A~O）的旧版条目一律丢弃——
+     * 缓存路径丢弃 = 本地快照清空；flush 全量合并路径丢弃 = 下次写回时从云端删除。
+     */
     private static List<SkillEntry> parseSkills(String body, boolean filterByInstalledMods) {
         List<SkillEntry> list = new ArrayList<>();
+        int legacyDropped = 0;
+        int blackFiltered = 0;
         try {
             JsonElement el = JsonParser.parseString(body);
             if (el.isJsonArray()) {
                 for (JsonElement e : el.getAsJsonArray()) {
                     if (e.isJsonObject()) {
                         SkillEntry entry = SkillEntry.fromCloudJson(e.getAsJsonObject());
-                        if (entry != null
-                                && (!filterByInstalledMods || allRequiredModsInstalled(entry.skill().requiresMods()))) {
+                        if (entry == null) continue;
+                        // §13.4.2：本地黑名单直接丢弃（防止恶意条目跨服务器污染）
+                        if (SkillBlacklist.contains(entry.uuid())) {
+                            blackFiltered++;
+                            continue;
+                        }
+                        // 引擎有效性：旧版条目（无签名机制）直接删除
+                        if (!SkillValidator.isEngineEntry(entry)) {
+                            legacyDropped++;
+                            continue;
+                        }
+                        if (!filterByInstalledMods || allRequiredModsInstalled(entry.skill().requiresMods())) {
                             list.add(entry);
                         }
                     }
@@ -348,6 +493,12 @@ public class CloudSyncService {
             }
         } catch (Exception e) {
             LOGGER.warn("public_skills.json 解析失败: {}", e.getClass().getSimpleName());
+        }
+        if (legacyDropped > 0) {
+            LOGGER.info("已剔除 {} 条无签名机制的旧版魂技（P0 清理策略：直接删除）", legacyDropped);
+        }
+        if (blackFiltered > 0) {
+            LOGGER.info("已剔除 {} 条命中本地黑名单的魂技（§13.4.2）", blackFiltered);
         }
         return list;
     }

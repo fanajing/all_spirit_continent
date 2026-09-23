@@ -21,6 +21,7 @@ import org.fanajing.all_spirit_continent.All_spirit_continent;
 import org.fanajing.all_spirit_continent.init.ModAttachments;
 import org.fanajing.all_spirit_continent.network.OpenSoulAnimationPayload;
 import org.fanajing.all_spirit_continent.util.DebugStickMode;
+import org.fanajing.all_spirit_continent.util.MartialSoulInventoryHandler;
 import org.fanajing.all_spirit_continent.util.ModAdvancements;
 import org.fanajing.all_spirit_continent.util.PlayerLevelData;
 import org.fanajing.all_spirit_continent.util.SoulBeastAge;
@@ -202,6 +203,13 @@ public class TiaoShiBangItem extends Item {
                             .withStyle(ChatFormatting.RED));
             return;
         }
+        // 武魂模式已开启：忽略重复开启
+        if (data.isMartialSoulOpen()) return;
+
+        // 开环模式物品栏替换：保存原物品栏 → 清空 → 槽位0发放昊天锤
+        if (player instanceof ServerPlayer sp) {
+            MartialSoulInventoryHandler.open(sp);
+        }
 
         // 服务端 → 客户端：播放开武魂动画（携带当前选中的动画类型）
         PacketDistributor.sendToPlayer(
@@ -223,6 +231,10 @@ public class TiaoShiBangItem extends Item {
      * 关闭不需要检查魂环数（没开武魂时重复关闭也只会收到提示）。
      */
     public static void closeMartialSoul(Level level, Player player) {
+        // 武魂模式物品栏归还：清理魂器栏 → 恢复原物品栏
+        if (player instanceof ServerPlayer sp) {
+            MartialSoulInventoryHandler.close(sp);
+        }
         PacketDistributor.sendToPlayer(
                 (net.minecraft.server.level.ServerPlayer) player,
                 new OpenSoulAnimationPayload(0, 0));

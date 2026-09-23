@@ -1,6 +1,8 @@
 package org.fanajing.all_spirit_continent.skill;
 
+import java.util.EnumSet;
 import java.util.Locale;
+import java.util.Set;
 
 /**
  * 魂技动作原语（AI 输出标准动作序列的最小单元）。
@@ -64,8 +66,8 @@ public enum SkillPrimitive {
     BUFF_STATS(Category.SUPPORT, Param.ATTRIBUTE, Param.PERCENT, Param.DURATION, Param.TARGET),
     /** 范围全体增益：提升范围内友方属性 */
     BUFF_ALL(Category.SUPPORT, Param.ATTRIBUTE, Param.PERCENT, Param.DURATION, Param.RADIUS),
-    /** 护盾转移：将自身伤害吸收转化为队友护盾 */
-    SHIELD_TRANSFER(Category.SUPPORT, Param.TARGET, Param.VALUE, Param.DURATION),
+    /** 护盾转移：将自身伤害吸收转化为队友护盾（也可用作被动亡魂护盾） */
+    SHIELD_TRANSFER(Category.SUPPORT, Param.TARGET, Param.VALUE, Param.DURATION, Param.AMPLIFIER),
     /** 净化：移除目标负面效果 */
     CLEANSE(Category.SUPPORT, Param.TARGET, Param.RADIUS),
     /** 持续治疗：目标获得生命恢复效果 */
@@ -153,6 +155,16 @@ public enum SkillPrimitive {
         } catch (IllegalArgumentException e) {
             return null;
         }
+    }
+
+    /** 可用于融合被动（passive）的原语白名单：仅自身增益/治疗/防御/净化/表现类 */
+    private static final Set<SkillPrimitive> PASSIVE_ALLOWED = EnumSet.of(
+            ACCELERATE, BUFF_STATS, BUFF_ALL, HOT, SHIELD_TRANSFER, CLEANSE,
+            REFLECT, BARRIER, PHANTOM, PARTICLE);
+
+    /** 该原语是否允许出现在融合被动（passive）中 */
+    public static boolean isPassiveAllowed(SkillPrimitive p) {
+        return p != null && PASSIVE_ALLOWED.contains(p);
     }
 
     /** 原语系别 */

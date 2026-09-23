@@ -6,6 +6,7 @@ import net.minecraft.ChatFormatting;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import net.minecraft.network.chat.Component;
+import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.player.Player;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.bus.api.SubscribeEvent;
@@ -15,6 +16,8 @@ import net.neoforged.fml.config.ModConfig;
 import net.neoforged.fml.event.lifecycle.FMLCommonSetupEvent;
 import net.neoforged.neoforge.common.NeoForge;
 import net.neoforged.neoforge.event.RegisterCommandsEvent;
+import net.neoforged.neoforge.event.entity.living.LivingDeathEvent;
+import net.neoforged.neoforge.event.entity.player.PlayerContainerEvent;
 import net.neoforged.neoforge.event.entity.player.PlayerEvent;
 import net.neoforged.neoforge.event.server.ServerStartingEvent;
 import net.neoforged.neoforge.event.tick.PlayerTickEvent;
@@ -25,6 +28,8 @@ import org.fanajing.all_spirit_continent.init.ModAttachments;
 import org.fanajing.all_spirit_continent.init.ModCreativeTabs;
 import org.fanajing.all_spirit_continent.item.ModItems;
 import org.fanajing.all_spirit_continent.network.PlayerLevelSyncPayload;
+import org.fanajing.all_spirit_continent.skill.PassiveSkillHandler;
+import org.fanajing.all_spirit_continent.util.MartialSoulInventoryHandler;
 import org.fanajing.all_spirit_continent.util.PlayerLevelData;
 import org.fanajing.all_spirit_continent.util.SoulFlight;
 import org.fanajing.all_spirit_continent.util.SoulGrowth;
@@ -66,6 +71,10 @@ public class All_spirit_continent {
         LOGGER.info("===========================================");
         LOGGER.info("  欢迎游玩 全魂大陆 (All Spirit Continent)!");
         LOGGER.info("===========================================");
+        // §9.8 数据驱动 mod 技能加载器：扫描 config/all_spirit_continent/mod_skills/*.json
+        org.fanajing.all_spirit_continent.skill.engine.ModDataSkillLoader.scanAndLoad(null);
+        // §10 §10.2 巫妖王 9 环范例 → 跑校验报表（开发期校验，输出对 9 环规则的偏离）
+        org.fanajing.all_spirit_continent.skill.engine.SkillFixture.loadAndReport();
     }
 
     @SubscribeEvent
@@ -106,8 +115,8 @@ public class All_spirit_continent {
         }
         // 重算血量/攻击力加成（transient 修饰符不随 NBT 持久化，克隆/重生后必须重新应用）
         SoulGrowth.applyHealth(event.getEntity());
-        SoulGrowth.applyAttack(event.getEntity());
-        // 死亡重生：血量回满（原版重生只回 20 点基础血量，不恢复魂环加成部分）
+        MartialSoulInventoryHandler.syncAttackState(event.getEntity());
+        // 死亡重生：血量回满（原版血量只回 20 点基础血量，不恢复魂环加成部分）
         if (event.isWasDeath()) {
             event.getEntity().setHealth(event.getEntity().getMaxHealth());
         }
@@ -127,7 +136,7 @@ public class All_spirit_continent {
         Player player = event.getEntity();
         if (player.level().isClientSide) return;
         SoulGrowth.applyHealth(player);
-        SoulGrowth.applyAttack(player);
+        MartialSoulInventoryHandler.syncAttackState(player);
         if (player.getServer() != null) {
             player.getServer().execute(() -> syncLevelDataToClient(player));
         }
@@ -152,7 +161,7 @@ public class All_spirit_continent {
         );
         // 重算血量/攻击力加成（重进世界后 transient 修饰符已丢失，按存档数据恢复）
         SoulGrowth.applyHealth(event.getEntity());
-        SoulGrowth.applyAttack(event.getEntity());
+        MartialSoulInventoryHandler.syncAttackState(event.getEntity());
         // 重新登录补满血量：NBT 加载阶段血量修饰符尚未应用（基础上限 20），
         // 存档血量（如 100w）会被原版钳制为 20，属性恢复后当前血量已失真，需补满。
         // 跨维度传送不重建玩家实体、不重新加载 NBT，不受此问题影响。
@@ -173,7 +182,7 @@ public class All_spirit_continent {
         Player player = event.getEntity();
         if (player.level().isClientSide) return;
         SoulGrowth.applyHealth(player);
-        SoulGrowth.applyAttack(player);
+        MartialSoulInventoryHandler.syncAttackState(player);
         syncLevelDataToClient(player);
     }
 
@@ -185,6 +194,47 @@ public class All_spirit_continent {
         Player player = event.getEntity();
         if (!player.level().isClientSide) {
             SoulFlight.tick(player);
+            if (player instanceof ServerPlayer sp) {
+                PassiveSkillHandler.tick(sp);
+                MartialSoulInventoryHandler.tick(sp);
+            }
+        }
+    }
+
+    /**
+     * 玩家登出：若武魂模式开启，强制关闭并归还物品栏。
+     * 防止原物品栏快照只留在内存中导致登出丢失，也避免留下魂器模式物品栏。
+     * V6.2：同时清理进行中的「吸收魂环动画」流程锁（动画中断，环仍留地面可重新右键）。
+     */
+    @SubscribeEvent
+    public void onPlayerLoggedOut(PlayerEvent.PlayerLoggedOutEvent event) {
+        if (event.getEntity() instanceof ServerPlayer sp) {
+            MartialSoulInventoryHandler.forceClose(sp);
+            org.fanajing.all_spirit_continent.entity.SoulRingEntity.clearAbsorbingForPlayer(sp.getUUID());
+        }
+    }
+
+    /**
+     * 玩家死亡结算前：若武魂模式开启，先关闭武魂归还原物品栏。
+     * 保证死亡掉落的是原物品栏（昊天锤不会掉落），且原物品不会被武魂快照"吞掉"。
+     * V6.2：死亡中断吸收动画流程锁（客户端动画随死亡恢复；环仍留地面可重新右键）。
+     */
+    @SubscribeEvent
+    public void onPlayerDeath(LivingDeathEvent event) {
+        if (event.getEntity() instanceof ServerPlayer sp) {
+            MartialSoulInventoryHandler.forceClose(sp);
+            org.fanajing.all_spirit_continent.entity.SoulRingEntity.clearAbsorbingForPlayer(sp.getUUID());
+        }
+    }
+
+    /**
+     * 容器关闭兜底：回收意外流入容器的昊天锤（防复制）。
+     * 无论锤子通过何种途径进入箱子等外部容器，只要容器一关闭就被回收回玩家槽位0。
+     */
+    @SubscribeEvent
+    public void onContainerClosed(PlayerContainerEvent.Close event) {
+        if (event.getEntity() instanceof ServerPlayer sp) {
+            MartialSoulInventoryHandler.recoverFromContainer(sp, event.getContainer());
         }
     }
 

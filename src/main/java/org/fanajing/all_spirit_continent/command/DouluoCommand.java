@@ -11,8 +11,14 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
 import net.neoforged.neoforge.event.RegisterCommandsEvent;
 import org.fanajing.all_spirit_continent.cloud.CloudSyncService;
+import org.fanajing.all_spirit_continent.cloud.SkillBlacklist;
 import org.fanajing.all_spirit_continent.data.PlayerSkillDataStore;
+import org.fanajing.all_spirit_continent.skill.AbilitySignature;
+import org.fanajing.all_spirit_continent.skill.engine.ModResourceScanner;
+import org.fanajing.all_spirit_continent.skill.profile.MobProfile;
+import org.fanajing.all_spirit_continent.skill.profile.ProfileCache;
 import org.fanajing.all_spirit_continent.skill.RatingService;
+import org.fanajing.all_spirit_continent.skill.SkillData;
 import org.fanajing.all_spirit_continent.skill.SkillEntry;
 import org.fanajing.all_spirit_continent.util.PlayerSkillConfig;
 
@@ -29,6 +35,7 @@ import java.util.List;
  * /douluo rate &lt;环位1-9&gt; &lt;1-5|cancel&gt;  评分/撤回（用环位定位，不用 uuid）
  * /douluo search &lt;武魂名&gt; &lt;怪物注册名&gt;   查询云端魂技
  * /douluo upload &lt;环位1-9&gt; [mods...] 手动上传该环位魂技（可选：空格分隔的依赖 mod id，如 iceandfire）
+ * /douluo signature                 查看 9 环位已绑定的魂技与签名机制（A~O）
  * /douluo status                    查看当前配置
  * </pre>
  * 全部在服务端执行；apiKey 仅存服务端，绝不外发。
@@ -81,7 +88,60 @@ public class DouluoCommand {
                                                 StringArgumentType.getString(ctx, "mods"))))))
                 .then(Commands.literal("status")
                         .executes(ctx -> status(ctx.getSource())))
+                .then(Commands.literal("signature")
+                        .executes(ctx -> signature(ctx.getSource())))
+                .then(Commands.literal("blacklist")
+                        .executes(ctx -> blacklistShow(ctx.getSource()))
+                        .then(Commands.literal("clear")
+                                .requires(src -> src.hasPermission(2))
+                                .executes(ctx -> blacklistClear(ctx.getSource()))))
+                .then(Commands.literal("mobprofile")
+                        // /douluo mobprofile  → 列出已观察的 mob 画像（按观察次数降序前 10）
+                        .executes(ctx -> mobProfileList(ctx.getSource()))
+                        // /douluo mobprofile show <mobId>  → 查看画像详情
+                        .then(Commands.literal("show")
+                                .then(Commands.argument("mobId", StringArgumentType.greedyString())
+                                        .executes(ctx -> mobProfileShow(ctx.getSource(),
+                                                StringArgumentType.getString(ctx, "mobId")))))
+                        // /douluo mobprofile add <mobId> <签名>  → 玩家手动补充签名
+                        .then(Commands.literal("add")
+                                .then(Commands.argument("mobId", StringArgumentType.word())
+                                        .then(Commands.argument("signature", StringArgumentType.word())
+                                                .suggests((ctx, builder) -> net.minecraft.commands.SharedSuggestionProvider.suggest(
+                                                        java.util.Arrays.stream(AbilitySignature.values())
+                                                                .map(Enum::name).toArray(String[]::new),
+                                                        builder))
+                                                .executes(ctx -> mobProfileAdd(ctx.getSource(),
+                                                        StringArgumentType.getString(ctx, "mobId"),
+                                                        StringArgumentType.getString(ctx, "signature"))))))
+                        // /douluo mobprofile complete <mobId>  → 标记画像为完整（玩家确认）
+                        .then(Commands.literal("complete")
+                                .then(Commands.argument("mobId", StringArgumentType.greedyString())
+                                        .executes(ctx -> mobProfileComplete(ctx.getSource(),
+                                                StringArgumentType.getString(ctx, "mobId"))))))
                 .executes(ctx -> status(ctx.getSource())));
+    }
+
+    // ===== blacklist =====
+
+    /** /douluo blacklist：显示本地黑名单条数 + mod 数据驱动魂技载入数 */
+    private static int blacklistShow(CommandSourceStack source) {
+        if (!(source.getEntity() instanceof ServerPlayer player)) return 0;
+        player.sendSystemMessage(Component.translatable("command.all_spirit_continent.blacklist_size",
+                SkillBlacklist.size()).withStyle(ChatFormatting.AQUA));
+        player.sendSystemMessage(Component.translatable("command.all_spirit_continent.mod_skills_loaded",
+                ModResourceScanner.lastLoadedCount).withStyle(ChatFormatting.GREEN));
+        return Command.SINGLE_SUCCESS;
+    }
+
+    /** /douluo blacklist clear：清空本地黑名单（需 OP 2 级） */
+    private static int blacklistClear(CommandSourceStack source) {
+        if (!(source.getEntity() instanceof ServerPlayer player)) return 0;
+        int before = SkillBlacklist.size();
+        SkillBlacklist.clear();
+        player.sendSystemMessage(Component.translatable("command.all_spirit_continent.blacklist_cleared",
+                before).withStyle(ChatFormatting.YELLOW));
+        return Command.SINGLE_SUCCESS;
     }
 
     // ===== camp =====
@@ -248,6 +308,30 @@ public class DouluoCommand {
         return Command.SINGLE_SUCCESS;
     }
 
+    // ===== signature（查看 9 环位签名机制）=====
+
+    private static int signature(CommandSourceStack source) throws CommandSyntaxException {
+        ServerPlayer player = source.getPlayerOrException();
+        PlayerSkillConfig cfg = PlayerSkillDataStore.get(player.serverLevel()).config(player);
+        player.sendSystemMessage(Component.translatable("command.all_spirit_continent.signature_header")
+                .withStyle(ChatFormatting.GOLD, ChatFormatting.BOLD));
+        for (int slot = 1; slot <= 9; slot++) {
+            SkillData skill = cfg.skillAt(slot);
+            var mech = cfg.mechanismAt(slot);
+            if (skill != null) {
+                player.sendSystemMessage(Component.translatable(
+                                "command.all_spirit_continent.signature_slot_bound", slot,
+                                skill.name(), mech.map(m -> m.code + " " + m.displayName).orElse("-"))
+                        .withStyle(ChatFormatting.AQUA));
+            } else {
+                player.sendSystemMessage(Component.translatable(
+                                "command.all_spirit_continent.signature_slot_empty", slot)
+                        .withStyle(ChatFormatting.GRAY));
+            }
+        }
+        return Command.SINGLE_SUCCESS;
+    }
+
     // ===== status =====
 
     private static int status(CommandSourceStack source) throws CommandSyntaxException {
@@ -275,6 +359,30 @@ public class DouluoCommand {
                 CloudSyncService.cachedSkillCount()).withStyle(ChatFormatting.AQUA));
         player.sendSystemMessage(Component.literal("OSS 可写: " + (CloudSyncService.ossWritable() ? "是" : "否（凭据未注入，写回被禁用）"))
                 .withStyle(CloudSyncService.ossWritable() ? ChatFormatting.GREEN : ChatFormatting.RED));
+        player.sendSystemMessage(Component.translatable("command.all_spirit_continent.status_cloud_upload",
+                onOff(CloudSyncService.isUploadEnabled())).withStyle(ChatFormatting.AQUA));
+        // §6.4 批量上传窗口（来自 ModConfig.UPLOAD_BATCH_INTERVAL_MINUTES）
+        try {
+            int batchMin = org.fanajing.all_spirit_continent.config.ModConfig.UPLOAD_BATCH_INTERVAL_MINUTES.get();
+            player.sendSystemMessage(Component.translatable("command.all_spirit_continent.status_batch_window",
+                    String.valueOf(batchMin)).withStyle(ChatFormatting.AQUA));
+        } catch (Exception ignored) {
+        }
+        // §6.6 严格环境隔离
+        try {
+            boolean strict = org.fanajing.all_spirit_continent.config.ModConfig.STRICT_ENVIRONMENT_ISOLATION.get();
+            player.sendSystemMessage(Component.translatable("command.all_spirit_continent.status_env_isolation",
+                    strict ? "开" : "关").withStyle(ChatFormatting.AQUA));
+        } catch (Exception ignored) {
+        }
+        // §6.5 跨版本画像数
+        try {
+            int stale = (int) org.fanajing.all_spirit_continent.skill.profile.ProfileCache.all().stream()
+                    .filter(p -> p.isStale()).count();
+            player.sendSystemMessage(Component.translatable("command.all_spirit_continent.status_profiles_stale",
+                    String.valueOf(stale)).withStyle(stale > 0 ? ChatFormatting.YELLOW : ChatFormatting.GRAY));
+        } catch (Exception ignored) {
+        }
         player.sendSystemMessage(Component.literal("最近写回: " + CloudSyncService.lastWriteStatus())
                 .withStyle(ChatFormatting.AQUA));
         return Command.SINGLE_SUCCESS;
@@ -288,5 +396,123 @@ public class DouluoCommand {
     private static String maskTail(String key) {
         if (key.length() <= 4) return "";
         return key.substring(key.length() - 4);
+    }
+
+    // ===== mobprofile（§5.6 玩家手动补充入口）=====
+
+    /** /douluo mobprofile：列出已观察的 mob 画像（按观察次数降序前 10） */
+    private static int mobProfileList(CommandSourceStack source) {
+        if (!(source.getEntity() instanceof ServerPlayer player)) return 0;
+        var all = new java.util.ArrayList<>(ProfileCache.all());
+        all.sort((a, b) -> Integer.compare(b.observationCount(), a.observationCount()));
+        if (all.isEmpty()) {
+            player.sendSystemMessage(Component.translatable("command.all_spirit_continent.mobprofile_empty")
+                    .withStyle(ChatFormatting.YELLOW));
+            return Command.SINGLE_SUCCESS;
+        }
+        player.sendSystemMessage(Component.translatable("command.all_spirit_continent.mobprofile_header",
+                all.size()).withStyle(ChatFormatting.AQUA));
+        int shown = 0;
+        for (MobProfile profile : all) {
+            if (shown >= 10) break;
+            String mark = profile.incomplete() ? "⚠" : "✓";
+            player.sendSystemMessage(Component.translatable("command.all_spirit_continent.mobprofile_item",
+                    mark, profile.mobId(), profile.observationCount(),
+                    String.join("、", profile.reliableSignatures().stream()
+                            .map(s -> s.displayName).toList())));
+            shown++;
+        }
+        return Command.SINGLE_SUCCESS;
+    }
+
+    /** /douluo mobprofile show <mobId>：查看画像详情（属性 + 签名 + 阶段 + 主题） */
+    private static int mobProfileShow(CommandSourceStack source, String mobIdArg) {
+        if (!(source.getEntity() instanceof ServerPlayer player)) return 0;
+        String mobId = mobIdArg.toLowerCase(java.util.Locale.ROOT).contains(":") ? mobIdArg.toLowerCase(java.util.Locale.ROOT)
+                : "entity." + mobIdArg.toLowerCase(java.util.Locale.ROOT);
+        MobProfile profile = ProfileCache.get(mobId);
+        if (!profile.observed()) {
+            player.sendSystemMessage(Component.translatable("command.all_spirit_continent.mobprofile_not_found",
+                    mobId).withStyle(ChatFormatting.RED));
+            return 0;
+        }
+        player.sendSystemMessage(Component.translatable("command.all_spirit_continent.mobprofile_show_header",
+                profile.mobId(), profile.observationCount(),
+                profile.incomplete() ? "⚠ 不完整" : "✓ 完整")
+                .withStyle(ChatFormatting.AQUA));
+        player.sendSystemMessage(Component.translatable("command.all_spirit_continent.mobprofile_show_attrs",
+                profile.size().displayName, profile.attackPattern().displayName,
+                String.format("%.0f", profile.attributes().maxHealth()),
+                String.format("%.1f", profile.attributes().attackDamage()),
+                String.format("%.2f", profile.attributes().movementSpeed()))
+                .withStyle(ChatFormatting.GRAY));
+        if (!profile.combatTraits().isEmpty()) {
+            player.sendSystemMessage(Component.translatable("command.all_spirit_continent.mobprofile_show_traits",
+                    String.join("、", profile.combatTraits())).withStyle(ChatFormatting.GRAY));
+        }
+        if (!profile.themeKeywords().isEmpty()) {
+            player.sendSystemMessage(Component.translatable("command.all_spirit_continent.mobprofile_show_themes",
+                    String.join("、", profile.themeKeywords())).withStyle(ChatFormatting.GRAY));
+        }
+        if (!profile.signatures().isEmpty()) {
+            StringBuilder sigs = new StringBuilder();
+            for (AbilitySignature sig : profile.signatures()) {
+                if (sigs.length() > 0) sigs.append("、");
+                sigs.append(sig.displayName).append('×').append(profile.observationCount(sig))
+                    .append(String.format("[%.2f]", profile.confidence(sig)));
+            }
+            player.sendSystemMessage(Component.translatable("command.all_spirit_continent.mobprofile_show_sigs",
+                    sigs.toString()).withStyle(ChatFormatting.GRAY));
+        }
+        if (profile.isMultiPhase()) {
+            player.sendSystemMessage(Component.translatable("command.all_spirit_continent.mobprofile_show_phases")
+                    .withStyle(ChatFormatting.GOLD));
+            for (var phase : profile.phases()) {
+                player.sendSystemMessage(Component.literal("  阶段" + phase.phase() + "（" + phase.trigger() + "）："
+                        + String.join("、", phase.abilities())).withStyle(ChatFormatting.GOLD));
+            }
+        }
+        return Command.SINGLE_SUCCESS;
+    }
+
+    /** /douluo mobprofile add <mobId> <签名>：玩家手动补充签名（§5.6 兜底） */
+    private static int mobProfileAdd(CommandSourceStack source, String mobIdArg, String sigArg) {
+        if (!(source.getEntity() instanceof ServerPlayer player)) return 0;
+        String mobId = mobIdArg.toLowerCase(java.util.Locale.ROOT);
+        if (!mobId.contains(".")) mobId = "entity." + mobId;
+        AbilitySignature sig;
+        try {
+            sig = AbilitySignature.valueOf(sigArg.toUpperCase(java.util.Locale.ROOT));
+        } catch (IllegalArgumentException e) {
+            player.sendSystemMessage(Component.translatable("command.all_spirit_continent.mobprofile_invalid_sig",
+                    sigArg).withStyle(ChatFormatting.RED));
+            return 0;
+        }
+        MobProfile before = ProfileCache.get(mobId);
+        MobProfile updated = before.withManualSignature(sig, player.level().getGameTime());
+        ProfileCache.put(updated);
+        player.sendSystemMessage(Component.translatable("command.all_spirit_continent.mobprofile_added",
+                sig.displayName, mobId, updated.signatures().size(),
+                updated.incomplete() ? "⚠ 仍不完整" : "✓ 已完整")
+                .withStyle(updated.incomplete() ? ChatFormatting.YELLOW : ChatFormatting.GREEN));
+        return Command.SINGLE_SUCCESS;
+    }
+
+    /** /douluo mobprofile complete <mobId>：标记画像为完整（玩家明确确认） */
+    private static int mobProfileComplete(CommandSourceStack source, String mobIdArg) {
+        if (!(source.getEntity() instanceof ServerPlayer player)) return 0;
+        String mobId = mobIdArg.toLowerCase(java.util.Locale.ROOT);
+        if (!mobId.contains(".")) mobId = "entity." + mobId;
+        MobProfile before = ProfileCache.get(mobId);
+        if (!before.observed()) {
+            player.sendSystemMessage(Component.translatable("command.all_spirit_continent.mobprofile_not_found",
+                    mobId).withStyle(ChatFormatting.RED));
+            return 0;
+        }
+        MobProfile updated = before.markComplete();
+        ProfileCache.put(updated);
+        player.sendSystemMessage(Component.translatable("command.all_spirit_continent.mobprofile_marked_complete",
+                mobId).withStyle(ChatFormatting.GREEN));
+        return Command.SINGLE_SUCCESS;
     }
 }

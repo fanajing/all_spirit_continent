@@ -54,10 +54,10 @@ public class CloudConfig {
             .comment("AI 模型名（DeepSeek 为 deepseek-chat）")
             .define("ai.model", "deepseek-chat");
 
-    /** AI 请求超时（秒） */
+    /** AI 请求超时（秒）；满足 §13.1.3：默认 10 秒（最低 10 秒硬下限防玩家误设阻塞） */
     public static final ModConfigSpec.ConfigValue<Integer> AI_TIMEOUT_SECONDS = BUILDER
-            .comment("AI 生成请求超时（秒）")
-            .define("ai.timeoutSeconds", 30);
+            .comment("AI 生成请求超时（秒），最小 10 秒（§13.1.3）")
+            .define("ai.timeoutSeconds", 10);
 
     /** 熔断：连续失败多少次后熔断 */
     public static final ModConfigSpec.ConfigValue<Integer> AI_BREAKER_FAILURES = BUILDER

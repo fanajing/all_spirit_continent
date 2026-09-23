@@ -29,11 +29,12 @@ import java.util.UUID;
  *   "mob_health_segment": "20_30",
  *   "skill_data": { "name": "...", "description": "...", "cooldown": 20,
  *                   "trigger": "RIGHT_CLICK",
- *                   "execution": [ {"primitive": "AOE_DAMAGE", "radius": 3.0, "value": 5.0} ] },
+ *                   "execution": [ {"primitive": "AOE_DAMAGE", "radius": 3.0, "value": 5.0} ],
+ *                   "signature_mechanism": "B" },
  *   "pool": "PIN_JIAN", "stats": {...}, "uploader_hash": "***"
  * }
  * </pre>
- * 本类表示 skill_data + 冗余来源字段（uuid/wuhun/mobId/mobHealthSegment 便于本地缓存检索）。
+ * 本类表示 skill_data + 冗余来源字段（uuid/wuhun/mobId/mobHealthSegment/signatureMechanism）。
  */
 public record SkillData(
         String uuid,
@@ -42,22 +43,26 @@ public record SkillData(
         int cooldown,
         String trigger,
         List<ExecutionStep> execution,
+        List<ExecutionStep> passive,
         String wuhun,
         String mobId,
         String mobHealthSegment,
         int ringAge,
-        List<String> requiresMods
+        List<String> requiresMods,
+        String signatureMechanism
 ) {
     private static final Logger LOGGER = LogUtils.getLogger();
     private static final Gson GSON = new GsonBuilder().create();
 
     /** 依赖 mod 列表（需全部安装该魂技才可用）；空 = 仅原版生效 */
     public SkillData {
+        passive = passive == null ? List.of() : List.copyOf(passive);
         requiresMods = requiresMods == null ? List.of()
                 : requiresMods.stream()
                         .filter(m -> m != null && !m.isBlank())
                         .map(String::trim)
                         .toList();
+        signatureMechanism = signatureMechanism == null ? "" : signatureMechanism.trim().toUpperCase(Locale.ROOT);
     }
 
     /** 冷却时间下限（tick）：任何魂技至少 1 秒冷却，防止无冷却滥用 */
@@ -120,6 +125,12 @@ public record SkillData(
             sd.add("requires_mods", arr);
         }
         sd.add("execution", GSON.toJsonTree(execution));
+        if (passive != null && !passive.isEmpty()) {
+            sd.add("passive", GSON.toJsonTree(passive));
+        }
+        if (signatureMechanism != null && !signatureMechanism.isEmpty()) {
+            sd.addProperty("signature_mechanism", signatureMechanism);
+        }
         root.add("skill_data", sd);
         return root;
     }
@@ -152,8 +163,10 @@ public record SkillData(
                 }
             }
         }
-        SkillData data = new SkillData(uuid, name, description, cooldown, trigger, execution,
-                wuhun, mobId, segment, ringAge, parseRequiresMods(sd));
+        List<ExecutionStep> passive = parsePassive(sd);
+        String mechanism = sd.has("signature_mechanism") ? sd.get("signature_mechanism").getAsString() : "";
+        SkillData data = new SkillData(uuid, name, description, cooldown, trigger, execution, passive,
+                wuhun, mobId, segment, ringAge, parseRequiresMods(sd), mechanism);
         return data.isValid() ? data : null;
     }
 
@@ -172,9 +185,26 @@ public record SkillData(
                 }
             }
         }
+        List<ExecutionStep> passive = parsePassive(sd);
+        String mechanism = sd.has("signature_mechanism") ? sd.get("signature_mechanism").getAsString() : "";
         SkillData data = new SkillData(UUID.randomUUID().toString(), name, description, cooldown,
-                trigger, execution, wuhun, mobId, segment, 0, parseRequiresMods(sd));
+                trigger, execution, passive, wuhun, mobId, segment, 0, parseRequiresMods(sd), mechanism);
         return data.isValid() ? data : null;
+    }
+
+    /** 解析 passive（融合被动）：仅接受被动白名单内的增益类原语，非法步骤直接丢弃 */
+    private static List<ExecutionStep> parsePassive(JsonObject sd) {
+        List<ExecutionStep> passive = new ArrayList<>();
+        if (!sd.has("passive") || !sd.get("passive").isJsonArray()) return passive;
+        for (JsonElement el : sd.getAsJsonArray("passive")) {
+            if (!el.isJsonObject()) continue;
+            ExecutionStep step = ExecutionStep.fromJson(el.getAsJsonObject());
+            SkillPrimitive p = SkillPrimitive.byName(step.primitive());
+            if (p != null && SkillPrimitive.isPassiveAllowed(p) && isStepValid(step)) {
+                passive.add(step);
+            }
+        }
+        return passive;
     }
 
     /** 解析 requires_mods：兼容数组（多个 mod）与单字符串两种写法 */
@@ -224,7 +254,9 @@ public record SkillData(
 
     /** 整条技能校验：名称与执行步骤非空 */
     public boolean isValid() {
-        return name != null && !name.isEmpty() && execution != null && !execution.isEmpty();
+        return name != null && !name.isEmpty()
+                && ((execution != null && !execution.isEmpty())
+                || (passive != null && !passive.isEmpty()));
     }
 
     /** 冷却时间（tick） */
@@ -237,16 +269,32 @@ public record SkillData(
         return trigger == null ? "RIGHT_CLICK" : trigger;
     }
 
+    /** 签名机制代码（A~O）；空串表示未绑定 */
+    public String signatureMechanism() {
+        return signatureMechanism == null ? "" : signatureMechanism;
+    }
+
+    /** 是否已绑定签名机制 */
+    public boolean hasMechanism() {
+        return signatureMechanism != null && !signatureMechanism.isEmpty();
+    }
+
+    /** 绑定签名机制副本（覆盖原 mechanism） */
+    public SkillData withMechanism(String mechanism) {
+        return new SkillData(uuid, name, description, cooldown, trigger, execution, passive,
+                wuhun, mobId, mobHealthSegment, ringAge, requiresMods, mechanism);
+    }
+
     /** 绑定魂环年限副本（吸收/推演后写入实际魂环年限，驱动伤害缩放） */
     public SkillData withRingAge(int age) {
-        return new SkillData(uuid, name, description, cooldown, trigger, execution,
-                wuhun, mobId, mobHealthSegment, Math.max(0, age), requiresMods);
+        return new SkillData(uuid, name, description, cooldown, trigger, execution, passive,
+                wuhun, mobId, mobHealthSegment, Math.max(0, age), requiresMods, signatureMechanism);
     }
 
     /** 绑定依赖 mod 列表副本（上传时标记该魂技需要哪些 mod 才能生效，全部安装才下载/抽取） */
     public SkillData withRequiresMods(List<String> mods) {
-        return new SkillData(uuid, name, description, cooldown, trigger, execution,
-                wuhun, mobId, mobHealthSegment, ringAge, mods);
+        return new SkillData(uuid, name, description, cooldown, trigger, execution, passive,
+                wuhun, mobId, mobHealthSegment, ringAge, mods, signatureMechanism);
     }
 
     // ===== 数值预览（GUI 显示）=====
@@ -264,7 +312,7 @@ public record SkillData(
                         SkillData.fmt(mult)).withStyle(ChatFormatting.GOLD));
             }
         }
-        if (execution.isEmpty()) {
+        if (execution.isEmpty() && (passive == null || passive.isEmpty())) {
             lines.add(Component.translatable("primitive.all_spirit_continent.unknown").withStyle(ChatFormatting.GRAY));
             return lines;
         }
@@ -278,6 +326,20 @@ public record SkillData(
                 line.append(Component.literal(" " + summary).withStyle(ChatFormatting.DARK_GREEN));
             }
             lines.add(line);
+        }
+        if (passive != null && !passive.isEmpty()) {
+            lines.add(Component.translatable("preview.all_spirit_continent.passive_title").withStyle(ChatFormatting.AQUA));
+            for (ExecutionStep step : passive) {
+                SkillPrimitive primitive = SkillPrimitive.byName(step.primitive);
+                if (primitive == null) continue;
+                String key = "primitive.all_spirit_continent." + primitive.name().toLowerCase(Locale.ROOT);
+                MutableComponent line = Component.translatable(key).withStyle(ChatFormatting.AQUA);
+                String summary = paramSummary(step.params());
+                if (!summary.isEmpty()) {
+                    line.append(Component.literal(" " + summary).withStyle(ChatFormatting.DARK_AQUA));
+                }
+                lines.add(line);
+            }
         }
         return lines;
     }
@@ -318,4 +380,24 @@ public record SkillData(
     public static double damageMultiplier(int age) {
         return Math.pow(2, SoulBeastAge.tierOf(age));
     }
+
+    // ===== EXECUTE 数值语义（§13.7.2 + §7.5）=====
+
+    /**
+     * EXECUTE 原语的斩杀阈值倍数：target.getHealth() ≤ value × 该倍数 时进入斩杀分支。
+     * 设计上等于 2.0（让 value≈满血 1%~2% 时斩杀线 ≈ 满血 2%~4%）。
+     */
+    public static final double EXECUTE_KILL_THRESHOLD_MULTIPLIER = 2.0;
+
+    /**
+     * EXECUTE 原语斩杀命中时的伤害乘数（相对 value）。
+     * 设计上等于 4.0；普通分支（血量未到斩杀线）= 1.0。
+     */
+    public static final double EXECUTE_KILL_DAMAGE_MULTIPLIER = 4.0;
+
+    /**
+     * EXECUTE 普通分支伤害乘数（相对 value）。
+     * 设计上等于 1.0；与斩杀分支共享 raw value，但伤害表现完全分流。
+     */
+    public static final double EXECUTE_NORMAL_DAMAGE_MULTIPLIER = 1.0;
 }

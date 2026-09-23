@@ -32,6 +32,10 @@ public class SoulRingEntityRenderer extends EntityRenderer<SoulRingEntity> {
     @Override
     public void render(SoulRingEntity entity, float yaw, float partialTick,
                        PoseStack pose, MultiBufferSource buffer, int packedLight) {
+        // V6.2 吸收动画：该魂环已化为「魂环灵体」升空播放动画，
+        // 吸收期间隐藏实体本体与年限文字（灵体落位后服务端会消散此实体）
+        if (RingAbsorbCinematic.isEntityHidden(entity.getId())) return;
+
         int age = entity.getRingAge();
         if (age <= 0) return;
 

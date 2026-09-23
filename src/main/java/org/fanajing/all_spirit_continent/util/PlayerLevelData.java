@@ -29,6 +29,8 @@ public class PlayerLevelData {
     private List<Integer> ringAges;
     /** 已消耗「重刷（自行推演）」机会的环位集合（index 与 ringAges 一致；每玩家每环位仅一次） */
     private final Set<Integer> rerolledRings;
+    /** 武魂模式（开环物品栏替换）是否开启：服务端权威状态；异常退出时随存档恢复，保证物品栏一致 */
+    private boolean martialSoulOpen = false;
 
     /** 持久化序列化 Codec（服务端 NBT 存档） */
     public static final Codec<PlayerLevelData> CODEC = RecordCodecBuilder.create(instance ->
@@ -40,7 +42,8 @@ public class PlayerLevelData {
                     Codec.FLOAT.fieldOf("maxSpiritPower").forGetter(d -> d.maxSpiritPower),
                     Codec.STRING.optionalFieldOf("title", "").forGetter(d -> d.title),
                     Codec.INT.listOf().optionalFieldOf("ringAges", List.of()).forGetter(d -> d.ringAges),
-                    Codec.INT.listOf().optionalFieldOf("rerolledRings", List.of()).forGetter(d -> List.copyOf(d.rerolledRings))
+                    Codec.INT.listOf().optionalFieldOf("rerolledRings", List.of()).forGetter(d -> List.copyOf(d.rerolledRings)),
+                    Codec.BOOL.optionalFieldOf("martialSoulOpen", false).forGetter(d -> d.martialSoulOpen)
             ).apply(instance, PlayerLevelData::new)
     );
 
@@ -67,7 +70,8 @@ public class PlayerLevelData {
                                 buf.readFloat(),
                                 buf.readUtf(),
                                 List.of(),
-                                List.of()
+                                List.of(),
+                                false // 武魂状态不网络同步（客户端动画由动画包单独驱动）
                         );
                         for (int i = 0; i < SoulRingLayout.MAX_RINGS; i++) {
                             data.setRingAge(i, buf.readVarInt());
@@ -84,11 +88,12 @@ public class PlayerLevelData {
 
     /** 全参构造（Codec 反序列化）：旧档位（0~5）自动迁移为具体年限；精神力上限按成长公式重算 */
     public PlayerLevelData(boolean activated, int level, int exp, float spiritPower, float maxSpiritPower,
-                           String title, List<Integer> ringAges, List<Integer> rerolledRings) {
+                           String title, List<Integer> ringAges, List<Integer> rerolledRings, boolean martialSoulOpen) {
         this.activated = activated;
         this.level = level;
         this.exp = Math.max(0, exp);
         this.title = title == null ? "" : title;
+        this.martialSoulOpen = martialSoulOpen;
         this.ringAges = new ArrayList<>();
         for (int age : ringAges) {
             this.ringAges.add(migrateRingAge(age));
@@ -208,6 +213,15 @@ public class PlayerLevelData {
         this.title = title == null ? "" : title;
     }
 
+    // ----- 武魂模式（开环物品栏替换，服务端状态）-----
+    public boolean isMartialSoulOpen() {
+        return martialSoulOpen;
+    }
+
+    public void setMartialSoulOpen(boolean martialSoulOpen) {
+        this.martialSoulOpen = martialSoulOpen;
+    }
+
     // ----- 魂环年限（每环独立，具体年限值）-----
     /** 获取第 index 环（从0开始）的年限（年）；越界/缺失返回 0（无环） */
     public int getRingAge(int index) {
@@ -249,6 +263,11 @@ public class PlayerLevelData {
         rerolledRings.add(ringIndex);
     }
 
+    /** 退还该环位的重刷机会（拒绝吸收回滚，该环未保留时调用） */
+    public void unmarkRerolled(int ringIndex) {
+        rerolledRings.remove(ringIndex);
+    }
+
     /** 从另一份数据整体复制（死亡保留/换维度同步用，含魂环与经验） */
     public void copyFrom(PlayerLevelData other) {
         this.activated = other.activated;
@@ -260,6 +279,8 @@ public class PlayerLevelData {
         this.ringAges = new ArrayList<>(other.ringAges);
         this.rerolledRings.clear();
         this.rerolledRings.addAll(other.rerolledRings);
+        // 武魂模式不随克隆复制：新实体默认关闭（死亡/重进前先强制恢复物品栏）
+        this.martialSoulOpen = false;
     }
 
     /** 重置为全新玩家状态（死亡清除魂师身份用：魂师身份与全部魂环一并删除） */
@@ -272,5 +293,6 @@ public class PlayerLevelData {
         this.title = "";
         this.ringAges = new ArrayList<>(Collections.nCopies(SoulRingLayout.MAX_RINGS, 0));
         this.rerolledRings.clear();
+        this.martialSoulOpen = false;
     }
 }

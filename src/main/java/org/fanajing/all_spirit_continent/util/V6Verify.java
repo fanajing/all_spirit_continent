@@ -113,7 +113,7 @@ public final class V6Verify {
 
     private static SkillEntry entry(String pool, RatingStats stats) {
         SkillData sd = new SkillData(UUID.randomUUID().toString(), "验证魂技", "验证用", 20,
-                "RIGHT_CLICK", List.of(), "昊天锤", "minecraft:zombie", "20_30", 100, List.of());
+                "RIGHT_CLICK", List.of(), List.of(), "昊天锤", "minecraft:zombie", "20_30", 100, List.of(), "");
         return new SkillEntry(sd, pool, stats, "", "");
     }
 

@@ -102,6 +102,19 @@ public class PlayerSkillDataStore extends SavedData {
         setDirty();
     }
 
+    /** 绑定签名机制到环位（三池条目绑定技能时回放玩家级持有状态）；冲突时返回 false */
+    public boolean bindMechanism(ServerPlayer player, int slot, org.fanajing.all_spirit_continent.skill.engine.SignatureMechanism mechanism) {
+        boolean ok = config(player).bindMechanism(slot, mechanism);
+        if (ok) setDirty();
+        return ok;
+    }
+
+    /** 解绑环位签名机制（拒绝吸收回滚时调用） */
+    public void unbindMechanism(ServerPlayer player, int slot) {
+        config(player).unbindMechanism(slot);
+        setDirty();
+    }
+
     public void setCamp(ServerPlayer player, String camp) {
         config(player).setCamp(camp);
         setDirty();

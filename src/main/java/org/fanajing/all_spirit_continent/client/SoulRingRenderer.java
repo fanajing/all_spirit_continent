@@ -19,16 +19,19 @@ import org.fanajing.all_spirit_continent.item.TiaoShiBangItem;
 import org.fanajing.all_spirit_continent.util.DebugStickMode;
 import org.fanajing.all_spirit_continent.util.PlayerLevelData;
 import org.fanajing.all_spirit_continent.util.SoulRingAge;
+import org.fanajing.all_spirit_continent.util.SoulRingAnimConfig;
 import org.fanajing.all_spirit_continent.util.SoulRingLayout;
 import org.joml.Matrix4f;
 
 /**
  * 魂环世界渲染器（纯客户端）。
  *  - 魂环数量 = 已获魂环数（实际持有的年限非零环位；节点封顶未获取新魂环不计入）
- *  - 魂环常隐藏：只有「开武魂」动画触发后才显示
+ *  - 魂环常隐藏：只有「开武魂」动画触发后才显示（吸收魂环动画的「武魂显形」也会显示）
  *  - 开武魂动画：从第 1 环开始依次释放——每环从玩家头部出现，
  *    尺寸从前一环大小逐渐增大到峰值（比目标略大）再缩小回目标尺寸，
  *    同时从头部逐步下移到脚底（不是同时移动，环与环之间有先后间隔）
+ *  - 吸收动画的「武魂显形」（武魂未开时）：复用同一套开武魂时间表，
+ *    已持有魂环从显形第一帧起逐环浮现（不再是瞬间全部闪出）
  *  - 旋转方向交替：第1个顺时针 → 第2个逆时针 → 第3个顺时针……
  *
  * 说明：当前仅渲染本机玩家自己的魂环（客户端只持有自己的等级数据），
@@ -76,6 +79,12 @@ public class SoulRingRenderer {
     /** 当前播放的动画类型：0 = 动画1（头部释放），1 = 动画2（脚底膨胀） */
     private static int animType = 0;
 
+    // ===== 吸收「武魂显形」浮现状态（武魂未开时：旧环按开武魂时间表逐环浮现，不瞬显） =====
+    /** 显形中的魂环数（0 = 无显形浮现；等于吸收前已持有环数，加环在落位上报后才发生） */
+    private static int revealRingCount = 0;
+    /** 武魂显形浮现动画起点（游戏 tick，显形第一帧钉住） */
+    private static long revealStartTick = -1;
+
     /** 由网络包调用：按指定动画类型开始播放开武魂动画 */
     public static void startAnimation(int ringCount, int type) {
         Minecraft mc = Minecraft.getInstance();
@@ -104,17 +113,44 @@ public class SoulRingRenderer {
         Player player = mc.player;
         if (player == null || mc.level == null) return;
 
-        // 等级系统未激活或武魂未开启时不渲染（魂环常隐藏）
+        // 等级系统未激活时不渲染（魂环常隐藏，仅在武魂开启 / 吸收「武魂显形」时显示）
         PlayerLevelData data = player.getData(ModAttachments.PLAYER_LEVEL_DATA.get());
         if (!data.isActivated()) return;
-        if (animRingCount <= 0) {
-            // 未开武魂：不渲染魂环，但仍允许「调节环大小」模式的预览环
+        // V6.2 吸收动画的「武魂显形」：不动物品栏，仅用环显形代替开武魂视觉
+        boolean absorbShow = RingAbsorbCinematic.isShowingRings();
+        if (animRingCount <= 0 && !absorbShow) {
+            // 未开武魂：不渲染魂环；显形结束后清理浮现状态，但仍允许「调节环大小」模式的预览环
+            if (revealRingCount != 0) {
+                revealRingCount = 0;
+                revealStartTick = -1;
+            }
             renderResizePreview(event, mc, player, data, 0);
             return;
         }
-        // 武魂开启中：环数取实时已获魂环数（获取/移除魂环后立即生效，新环直接出现在最终位置）
+        // 武魂开启中 / 吸收显形中：环数取实时已获魂环数
         int ringCount = Math.min(data.getRingCount(), SoulRingLayout.MAX_RINGS);
         if (ringCount <= 0) return;
+
+        // ===== 环出现的「动画时间表」 =====
+        // 武魂开启中：沿用开武魂动画时钟 animStartTick（环数实时取已获环数，新增环沿用原时间表）。
+        // 武魂未开而处于吸收显形：启用独立浮现时钟——从显形第一帧起，将环数快照锁为
+        // 「吸收前已持有环数」，按开武魂动画逐环错开浮现（头部释放下移 / 脚底膨胀），不再瞬间全部闪出。
+        long animBaseTick;
+        int animKind;
+        int renderCount;
+        if (animRingCount > 0) {
+            animBaseTick = animStartTick;
+            animKind = animType;
+            renderCount = ringCount;
+        } else {
+            if (revealRingCount == 0) {
+                revealRingCount = ringCount; // 快照：加环（落位上报）发生在显形之后，不影响本次浮现
+                revealStartTick = mc.level.getGameTime();
+            }
+            animBaseTick = revealStartTick;
+            animKind = SoulRingAnimConfig.getCurrentAnimId(); // 跟随玩家当前开武魂动画偏好
+            renderCount = revealRingCount;
+        }
 
         // 时间与插值：保证旋转平滑
         float partialTick = event.getPartialTick().getGameTimeDeltaTicks();
@@ -132,71 +168,25 @@ public class SoulRingRenderer {
         pose.pushPose();
         pose.translate(px - camPos.x, py - camPos.y, pz - camPos.z);
 
-        for (int i = 0; i < ringCount; i++) {
+        for (int i = 0; i < renderCount; i++) {
             // 旋转方向交替：第1个顺时针，第2个逆时针，第3个顺时针……
             // OpenGL 绕Y轴正角度旋转从上方看为逆时针，因此顺时针取负值
             float angle = (i % 2 == 0) ? -time * SPIN_SPEED : time * SPIN_SPEED;
 
-            float y;
-            float radius;
-            if (animType == 1) {
-                // ===== 动画2：脚底膨胀依次出现 =====
-                // 第 i 环在第 i-1 环到达峰值时开始（间隔 = 单环时长 × 峰值进度）
-                float ringStart = animStartTick + i * RING2_START_INTERVAL;
-                float elapsed = time - ringStart;
-                if (elapsed < 0) {
-                    continue; // 该环还没轮到，不渲染
-                }
-                y = Y_OFFSET + i * 0.002F;
-                float target = SoulRingLayout.getScaledRadius(i);
-                if (elapsed >= RING2_TICKS) {
-                    // 动画完成：停在目标尺寸
-                    radius = target;
-                } else {
-                    float progress = elapsed / RING2_TICKS;
-                    // 尺寸：从小 → 峰值（比目标大一点点） → 目标尺寸
-                    float peak = target * PEAK_FACTOR;
-                    if (progress < RING2_PEAK_FRACTION) {
-                        radius = lerp(RING2_START_SIZE, peak, progress / RING2_PEAK_FRACTION);
-                    } else {
-                        radius = lerp(peak, target, (progress - RING2_PEAK_FRACTION) / (1F - RING2_PEAK_FRACTION));
-                    }
-                }
-            } else {
-                // ===== 动画1（默认）：头部释放下移 =====
-                float ringStart = animStartTick + i * RING_ANIM_DELAY;
-                float elapsed = time - ringStart;
-                if (elapsed < 0) {
-                    continue; // 该环还没轮到，不渲染
-                }
-                if (elapsed >= RING_ANIM_TICKS) {
-                    // 动画完成：停在脚下目标尺寸
-                    y = Y_OFFSET + i * 0.002F;
-                    radius = SoulRingLayout.getScaledRadius(i);
-                } else {
-                    float progress = elapsed / RING_ANIM_TICKS;
-                    // 位置：从头部线性下移到脚底
-                    y = lerp(HEAD_Y, Y_OFFSET, progress) + i * 0.002F;
-                    // 尺寸：前一个魂环大小 → 峰值（比目标大一点点） → 目标尺寸
-                    float target = SoulRingLayout.getScaledRadius(i);
-                    float prevRadius = i > 0 ? SoulRingLayout.getScaledRadius(i - 1) : FIRST_RING_START;
-                    float peak = target * PEAK_FACTOR;
-                    if (progress < PEAK_FRACTION) {
-                        radius = lerp(prevRadius, peak, progress / PEAK_FRACTION);
-                    } else {
-                        radius = lerp(peak, target, (progress - PEAK_FRACTION) / (1F - PEAK_FRACTION));
-                    }
-                }
+            // 按动画时间表计算该环当前帧；环还没轮到出现（开武魂/显形逐环错开）则跳过
+            RingFrame frame = ringFrameAt(i, animBaseTick, animKind, time);
+            if (frame == null) {
+                continue;
             }
 
             pose.pushPose();
             pose.mulPose(Axis.YP.rotationDegrees(angle));
-            pose.translate(0, y, 0);
+            pose.translate(0, frame.y(), 0);
             Matrix4f matrix = pose.last().pose();
             // 每环独立年限贴图（年限不同则颜色不同）
             RenderType ringType = RenderType.entityTranslucentEmissive(
                     SoulRingAge.getTexture(data.getRingAge(i)));
-            drawFlatQuad(bufferSource.getBuffer(ringType), matrix, radius);
+            drawFlatQuad(bufferSource.getBuffer(ringType), matrix, frame.radius());
             pose.popPose();
             bufferSource.endBatch(ringType);
         }
@@ -236,6 +226,71 @@ public class SoulRingRenderer {
         pose.popPose();
 
         bufferSource.endBatch(renderType);
+    }
+
+    /** 单环某一帧的显示状态：y = 中心高度（格），radius = 半径 */
+    private record RingFrame(float y, float radius) {
+    }
+
+    /**
+     * 按「环出现时间表」计算第 i 环在时刻 time 的显示帧，武魂开启与吸收「武魂显形」共用：
+     * - 第 i 环从 startTick + i × 相邻间隔 才开始，未轮到返回 null（该帧不渲染）
+     * - 动画完成后停在地面最终位置（半径 = 目标尺寸）
+     * <p>
+     * 动画1（头部释放下移）：从头部出现，尺寸由前一环大小膨胀过峰值后收缩为目标，
+     * 同时高度从头部线性下移到脚底；动画2（脚底膨胀）：固定脚底高度，从小膨胀过峰值后停为目标。
+     */
+    private static RingFrame ringFrameAt(int i, long startTick, int type, float time) {
+        if (type == 1) {
+            // ===== 动画2：脚底膨胀依次出现 =====
+            // 第 i 环在第 i-1 环到达峰值时开始（间隔 = 单环时长 × 峰值进度）
+            float ringStart = startTick + i * RING2_START_INTERVAL;
+            float elapsed = time - ringStart;
+            if (elapsed < 0) {
+                return null; // 该环还没轮到，不渲染
+            }
+            float y = Y_OFFSET + i * 0.002F;
+            float target = SoulRingLayout.getScaledRadius(i);
+            if (elapsed >= RING2_TICKS) {
+                // 动画完成：停在目标尺寸
+                return new RingFrame(y, target);
+            }
+            float progress = elapsed / RING2_TICKS;
+            // 尺寸：从小 → 峰值（比目标大一点点） → 目标尺寸
+            float peak = target * PEAK_FACTOR;
+            float radius;
+            if (progress < RING2_PEAK_FRACTION) {
+                radius = lerp(RING2_START_SIZE, peak, progress / RING2_PEAK_FRACTION);
+            } else {
+                radius = lerp(peak, target, (progress - RING2_PEAK_FRACTION) / (1F - RING2_PEAK_FRACTION));
+            }
+            return new RingFrame(y, radius);
+        }
+
+        // ===== 动画1（默认）：头部释放下移 =====
+        float ringStart = startTick + i * RING_ANIM_DELAY;
+        float elapsed = time - ringStart;
+        if (elapsed < 0) {
+            return null; // 该环还没轮到，不渲染
+        }
+        if (elapsed >= RING_ANIM_TICKS) {
+            // 动画完成：停在脚下目标尺寸
+            return new RingFrame(Y_OFFSET + i * 0.002F, SoulRingLayout.getScaledRadius(i));
+        }
+        float progress = elapsed / RING_ANIM_TICKS;
+        // 位置：从头部线性下移到脚底
+        float y = lerp(HEAD_Y, Y_OFFSET, progress) + i * 0.002F;
+        // 尺寸：前一个魂环大小 → 峰值（比目标大一点点） → 目标尺寸
+        float target = SoulRingLayout.getScaledRadius(i);
+        float prevRadius = i > 0 ? SoulRingLayout.getScaledRadius(i - 1) : FIRST_RING_START;
+        float peak = target * PEAK_FACTOR;
+        float radius;
+        if (progress < PEAK_FRACTION) {
+            radius = lerp(prevRadius, peak, progress / PEAK_FRACTION);
+        } else {
+            radius = lerp(peak, target, (progress - PEAK_FRACTION) / (1F - PEAK_FRACTION));
+        }
+        return new RingFrame(y, radius);
     }
 
     private static float lerp(float a, float b, float t) {

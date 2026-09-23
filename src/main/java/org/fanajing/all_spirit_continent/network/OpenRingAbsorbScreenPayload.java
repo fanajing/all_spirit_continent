@@ -8,13 +8,15 @@ import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.resources.ResourceLocation;
 import net.neoforged.neoforge.network.handling.IPayloadContext;
 import org.fanajing.all_spirit_continent.All_spirit_continent;
+import org.fanajing.all_spirit_continent.client.RingAbsorbCinematic;
 import org.fanajing.all_spirit_continent.client.RingConfirmScreen;
 
 /**
- * 服务端 → 客户端：打开魂环·魂技感应确认窗口（不蹲右键点击魂环、校验通过后触发）。
+ * 服务端 → 客户端：打开魂环·魂技绑定窗口（V6.2 在吸收动画「落位加环」后触发）。
  * <p>
  * 携带感应到的魂技完整 JSON（客户端反序列化展示名称/描述/数值预览/来源评分），
- * 窗口内「吸收」经 ConfirmRingAbsorbPayload(ABSORB) 绑定技能到环位并吸收魂环。
+ * 窗口内「绑定」经 ConfirmRingAbsorbPayload(ABSORB) 把魂技固化到已吸收的环位。
+ * 窗口到达即代表魂环已吸收完毕，客户端据此结束吸收动画。
  */
 public record OpenRingAbsorbScreenPayload(
         int ringEntityId,
@@ -65,9 +67,15 @@ public record OpenRingAbsorbScreenPayload(
         return TYPE;
     }
 
-    /** 客户端处理：打开魂技感应确认窗口 */
+    /** 客户端处理：魂环已吸收完毕 → 结束吸收动画并打开「魂技绑定」窗口 */
     public static void handleClient(final OpenRingAbsorbScreenPayload payload, final IPayloadContext context) {
         context.enqueueWork(() -> {
+            // V6.2：窗口到达即代表动画落位加环完成，结束动画（环显形关闭、相机还原）
+            RingAbsorbCinematic.onAbsorbWindowOpened(payload.ringEntityId());
+            // 若是「自行推演」刷新：标记旧窗口为被替换，避免其 removed() 误发自动拒绝
+            if (Minecraft.getInstance().screen instanceof RingConfirmScreen current) {
+                current.markRefreshed();
+            }
             Minecraft.getInstance().setScreen(new RingConfirmScreen(
                     payload.ringEntityId(), payload.skillJson(), payload.ringNumber(),
                     payload.ringAge(), payload.avgRating(), payload.ratingCount(),

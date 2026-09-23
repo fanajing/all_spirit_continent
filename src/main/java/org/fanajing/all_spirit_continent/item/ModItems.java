@@ -22,22 +22,12 @@ public class ModItems {
     public static final DeferredItem<SoulRingItem> SOUL_RING = ITEMS.register("soul_ring",
             () -> new SoulRingItem(new Item.Properties().stacksTo(1).rarity(Rarity.EPIC)));
 
+    // ===== 昊天锤 - 武魂模式专属武器（开武魂由系统发放到物品栏，攻击力随魂环年限） =====
+    public static final DeferredItem<MartialSoulHammerItem> MARTIAL_SOUL_HAMMER = ITEMS.register("martial_soul_hammer",
+            () -> new MartialSoulHammerItem(new Item.Properties().stacksTo(1).rarity(Rarity.EPIC)));
+
     // ===== 在此处继续注册你的物品 =====
-    // 普通物品:
-    // public static final DeferredItem<Item> XXX = ITEMS.registerSimpleItem("xxx");
-    //
-    // 带属性的物品:
-    // public static final DeferredItem<Item> XXX = ITEMS.register("xxx",
-    //         () -> new Item(new Item.Properties().stacksTo(16)));
-    //
-    // 食物:
-    // public static final DeferredItem<Item> XXX = ITEMS.register("xxx",
-    //         () -> new Item(new Item.Properties().food(...)));
-    //
-    // 武器/工具（需要正确构造函数参数）:
-    // public static final DeferredItem<SwordItem> XXX = ITEMS.register("xxx_sword",
-    //         () -> new SwordItem(Tiers.DIAMOND, new Item.Properties().attributes(...)));
-    //
-    // 方块物品（对应ModBlocks中的方块）:
-    // public static final DeferredItem<BlockItem> XXX = ITEMS.registerSimpleBlockItem(ModBlocks.XXX);
+    // register("id", supplier)       → 自定义 Item 子类（可带 Properties 属性）
+    // registerSimpleItem("id")       → 普通物品
+    // registerSimpleBlockItem(...)   → 方块物品（需先在 ModBlocks 中注册方块，再注册对应物品）
 }

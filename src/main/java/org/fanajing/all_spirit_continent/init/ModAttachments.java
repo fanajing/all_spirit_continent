@@ -4,6 +4,7 @@ import net.neoforged.neoforge.attachment.AttachmentType;
 import net.neoforged.neoforge.registries.DeferredRegister;
 import net.neoforged.neoforge.registries.NeoForgeRegistries;
 import org.fanajing.all_spirit_continent.All_spirit_continent;
+import org.fanajing.all_spirit_continent.util.InventorySave;
 import org.fanajing.all_spirit_continent.util.PlayerLevelData;
 import org.fanajing.all_spirit_continent.util.SoulBeastData;
 
@@ -19,6 +20,13 @@ public class ModAttachments {
                     () -> AttachmentType.builder(PlayerLevelData::new)
                             .serialize(PlayerLevelData.CODEC)
                             .copyOnDeath()
+                            .build());
+
+    /** 武魂模式：开武魂前的原物品栏快照（持久化保存，防异常退出导致原物品丢失） */
+    public static final Supplier<AttachmentType<InventorySave>> INVENTORY_SAVE =
+            ATTACHMENT_TYPES.register("inventory_save",
+                    () -> AttachmentType.builder(InventorySave::new)
+                            .serialize(InventorySave.CODEC)
                             .build());
 
     /** 魂兽数据（年限，挂载到生物实体；持久化随实体 NBT 保存，跨区块卸载保留） */

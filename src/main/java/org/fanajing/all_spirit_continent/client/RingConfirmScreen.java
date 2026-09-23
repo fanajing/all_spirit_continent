@@ -17,14 +17,19 @@ import org.fanajing.all_spirit_continent.util.SoulBeastAge;
 import java.util.List;
 
 /**
- * 魂环·魂技感应确认窗口（V6.0 全面改造，替换原 SoulRingAbsorbScreen）。
+ * 魂环·魂技绑定窗口（V6.2：魂环已在吸收动画落位瞬间加给玩家并消散，本窗口决定魂环去留 + 魂技绑定）。
  * <p>
- * - 感应阶段：展示魂技名称/描述/数值预览/冷却/来源评分 + 魂环年限/怪物种类，
- *   按钮「吸收此魂技 / 拒绝此魂技 / 自行推演」
- * - 点击「吸收/拒绝」立即发送对应动作并关闭窗口，不再弹出评分界面；
- *   评分可选，玩家通过 /douluo rate <环位> <1-5> 指令进行
+ * - 展示魂技名称/描述/数值预览/冷却/来源评分 + 魂环年限/怪物种类，
+ *   按钮「吸收 / 拒绝 / 自行推演」
+ * - 吸收 → 保留已吸收的魂环并把魂技固化到该环位；拒绝 → 回滚本次吸收（魂环碎裂消散，
+ *   移除刚吸收的魂环，回到瓶颈封顶），点击立即发送对应动作并关闭窗口；
+ *   评分可选（/douluo rate <环位> <1-5>）
  * - 「自行推演」强制 AI 重生成（服务端回发新技能后由 OpenRingAbsorbScreenPayload 刷新本窗口）
- * - 无自动关闭倒计时，窗口保持到玩家做出选择；不暂停游戏
+ * - 无自动关闭倒计时，窗口保持到玩家做出选择；不暂停游戏；
+ *   ESC/死亡等任何未选择就关闭窗口的方式一律视为「拒绝」（回滚本次吸收），
+ *   只有点击「吸收」按钮才保留魂环
+ * - V6.2 起魂环实体通常在动画落位后已消散，怪物种类优先取魂环实体快照，
+ *   实体缺失时回退用魂技自身携带的 mob_id 展示（两者一致，均为魂兽注册名）
  */
 public class RingConfirmScreen extends Screen {
 
@@ -39,6 +44,11 @@ public class RingConfirmScreen extends Screen {
 
     /** 客户端魂环实体快照（实体已卸载/消散时为 null） */
     private SoulRingEntity ring;
+
+    /** 已做出明确选择（吸收/拒绝）则为 true；防止自动拒绝重复发包 */
+    private boolean decided;
+    /** 本窗口即将被「自行推演」的新技能刷新替换（新窗口到达时标记），不视为放弃 */
+    private boolean refreshed;
 
     public RingConfirmScreen(int ringEntityId, String skillJson, int ringNumber, int ringAge,
                              double avgRating, int ratingCount, boolean aiGenerated,
@@ -94,6 +104,7 @@ public class RingConfirmScreen extends Screen {
 
     /** 点击「吸收 / 拒绝」：发送动作（不评分，stars=0）并立即关闭 */
     private void onDecide(String action) {
+        decided = true;
         PacketDistributor.sendToServer(new ConfirmRingAbsorbPayload(ringEntityId, action, 0));
         onClose();
     }
@@ -102,6 +113,26 @@ public class RingConfirmScreen extends Screen {
     private void onRoll() {
         PacketDistributor.sendToServer(
                 new ConfirmRingAbsorbPayload(ringEntityId, ConfirmRingAbsorbPayload.ACTION_ROLL, 0));
+    }
+
+    /** 新技能刷新窗口到达时调用：标记本窗口是被替换而非被放弃，removed() 不再自动拒绝 */
+    public void markRefreshed() {
+        refreshed = true;
+    }
+
+    /**
+     * 窗口以任何方式被移除（ESC 关闭、死亡界面替换等）且未点「吸收」/「拒绝」时，
+     * 视为「拒绝」：回滚本次吸收（移除刚吸收的魂环）。只有点击「吸收」按钮才会保留魂环。
+     * 「自行推演」刷新走 setScreen 替换本窗口（refreshed=true），不触发自动拒绝。
+     */
+    @Override
+    public void removed() {
+        if (!decided && !refreshed) {
+            decided = true;
+            PacketDistributor.sendToServer(
+                    new ConfirmRingAbsorbPayload(ringEntityId, ConfirmRingAbsorbPayload.ACTION_REJECT, 0));
+        }
+        super.removed();
     }
 
     /** 窗口打开期间游戏不暂停 */
@@ -123,12 +154,17 @@ public class RingConfirmScreen extends Screen {
                         .withStyle(ChatFormatting.GOLD), cx, y, 0xFFFFFF);
         y += 16;
 
-        // 魂环信息：怪物种类 + 年限
-        MutableComponent beast = ring != null && !ring.getSourceType().isEmpty()
-                ? Component.translatable("screen.all_spirit_continent.ring_absorb.beast",
-                        Component.translatable(ring.getSourceType()))
-                : Component.translatable("screen.all_spirit_continent.ring_absorb.beast",
-                        Component.translatable("screen.all_spirit_continent.ring_absorb.unknown_beast"));
+        // 魂环信息：怪物种类 + 年限（V6.2 实体常已消散 → 回退用魂技 mob_id，两者一致）
+        String sourceKey = null;
+        if (ring != null && !ring.getSourceType().isEmpty()) {
+            sourceKey = ring.getSourceType();
+        } else if (skill != null && skill.mobId() != null
+                && !skill.mobId().isEmpty() && !"unknown".equalsIgnoreCase(skill.mobId())) {
+            sourceKey = skill.mobId();
+        }
+        MutableComponent beast = Component.translatable("screen.all_spirit_continent.ring_absorb.beast",
+                sourceKey != null ? Component.translatable(sourceKey)
+                        : Component.translatable("screen.all_spirit_continent.ring_absorb.unknown_beast"));
         MutableComponent age = Component.translatable("screen.all_spirit_continent.ring_absorb.age",
                 ring != null ? SoulBeastAge.format(ring.getRingAge()) : SoulBeastAge.format(ringAge));
         graphics.drawCenteredString(font, beast.withStyle(ChatFormatting.WHITE), cx, y, 0xFFFFFF);
@@ -195,6 +231,10 @@ public class RingConfirmScreen extends Screen {
         }
         graphics.drawCenteredString(font, source, cx, y, 0xFFFFFF);
 
+        // 底部提示：本窗口决定魂环去留（吸收保留并绑定 / 拒绝碎裂回滚）与魂技绑定
+        graphics.drawCenteredString(font,
+                Component.translatable("screen.all_spirit_continent.ring_absorb.bind_hint", ringNumber)
+                        .withStyle(ChatFormatting.GRAY), cx, this.height - 32, 0xFFFFFF);
         // 底部提示：评分可另行通过 /douluo rate <环位> <1-5> 进行（可选，不影响使用）
         graphics.drawCenteredString(font,
                 Component.translatable("screen.all_spirit_continent.ring_absorb.rate_hint")

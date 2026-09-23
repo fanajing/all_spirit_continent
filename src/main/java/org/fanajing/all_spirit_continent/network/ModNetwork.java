@@ -67,6 +67,34 @@ public class ModNetwork {
                 ConfirmRingAbsorbPayload::handleServer
         );
 
+        // V6.2 服务端 → 客户端：开始播放「吸收魂环动画」（右键判定通过后触发）
+        registrar.playToClient(
+                PlayRingAbsorbCinematicPayload.TYPE,
+                PlayRingAbsorbCinematicPayload.STREAM_CODEC,
+                PlayRingAbsorbCinematicPayload::handleClient
+        );
+
+        // V6.2 服务端 → 客户端：魂技感应完成，动画进入落位阶段
+        registrar.playToClient(
+                RingAbsorbSkillReadyPayload.TYPE,
+                RingAbsorbSkillReadyPayload.STREAM_CODEC,
+                RingAbsorbSkillReadyPayload::handleClient
+        );
+
+        // V6.2 服务端 → 客户端：取消本次吸收动画（魂技感应失败时）
+        registrar.playToClient(
+                RingAbsorbCancelPayload.TYPE,
+                RingAbsorbCancelPayload.STREAM_CODEC,
+                RingAbsorbCancelPayload::handleClient
+        );
+
+        // V6.2 客户端 → 服务端：吸收动画落位完成，真正加环
+        registrar.playToServer(
+                RingAbsorbLandPayload.TYPE,
+                RingAbsorbLandPayload.STREAM_CODEC,
+                RingAbsorbLandPayload::handleServer
+        );
+
         // V6.0 客户端 → 服务端：释放魂技（开武魂 + 技能键 R）
         registrar.playToServer(
                 CastSkillPayload.TYPE,
