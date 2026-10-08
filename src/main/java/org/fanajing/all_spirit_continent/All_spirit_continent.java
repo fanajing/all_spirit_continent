@@ -17,6 +17,7 @@ import net.neoforged.fml.event.lifecycle.FMLCommonSetupEvent;
 import net.neoforged.neoforge.common.NeoForge;
 import net.neoforged.neoforge.event.RegisterCommandsEvent;
 import net.neoforged.neoforge.event.entity.living.LivingDeathEvent;
+import net.neoforged.neoforge.event.entity.player.AttackEntityEvent;
 import net.neoforged.neoforge.event.entity.player.PlayerContainerEvent;
 import net.neoforged.neoforge.event.entity.player.PlayerEvent;
 import net.neoforged.neoforge.event.server.ServerStartingEvent;
@@ -33,6 +34,7 @@ import org.fanajing.all_spirit_continent.util.MartialSoulInventoryHandler;
 import org.fanajing.all_spirit_continent.util.PlayerLevelData;
 import org.fanajing.all_spirit_continent.util.SoulFlight;
 import org.fanajing.all_spirit_continent.util.SoulGrowth;
+import org.fanajing.all_spirit_continent.util.SoulPressure;
 import org.fanajing.all_spirit_continent.util.TitleSystem;
 import org.slf4j.Logger;
 
@@ -187,17 +189,29 @@ public class All_spirit_continent {
     }
 
     /**
-     * 玩家每 tick（仅服务端）：魂帝境界飞行能力与精神力消耗/回复。
+     * 玩家每 tick（仅服务端）：魂帝境界飞行能力与魂力消耗/回复 + 灵魂威压扫描。
      */
     @SubscribeEvent
     public void onPlayerTick(PlayerTickEvent.Post event) {
         Player player = event.getEntity();
         if (!player.level().isClientSide) {
             SoulFlight.tick(player);
+            SoulPressure.tick(player);
             if (player instanceof ServerPlayer sp) {
                 PassiveSkillHandler.tick(sp);
                 MartialSoulInventoryHandler.tick(sp);
             }
+        }
+    }
+
+    /**
+     * 恐惧档威压：被高年限魂兽压制时无法挥出任何攻击（原作「连抬手的勇气都没有」）。
+     * 只拦截玩家主动近战/远程攻击，不拦截魂技（魂技由 CastSkillPayload 单独拦截）。
+     */
+    @SubscribeEvent
+    public void onPlayerAttack(AttackEntityEvent event) {
+        if (SoulPressure.isFearbound(event.getEntity())) {
+            event.setCanceled(true);
         }
     }
 
@@ -225,6 +239,8 @@ public class All_spirit_continent {
             MartialSoulInventoryHandler.forceClose(sp);
             org.fanajing.all_spirit_continent.entity.SoulRingEntity.clearAbsorbingForPlayer(sp.getUUID());
         }
+        // 死亡清空威压状态：重生后由下一次扫描重新判定，避免 debuff 残留在尸体/重生点
+        if (event.getEntity() instanceof Player p) SoulPressure.clear(p);
     }
 
     /**
@@ -248,8 +264,8 @@ public class All_spirit_continent {
                         data.isActivated(),
                         data.getLevel(),
                         data.getExp(),
-                        data.getSpiritPower(),
-                        data.getMaxSpiritPower(),
+                        data.getSoulPower(),
+                        data.getMaxSoulPower(),
                         data.getTitle(),
                         data.getRingAges()
                 )

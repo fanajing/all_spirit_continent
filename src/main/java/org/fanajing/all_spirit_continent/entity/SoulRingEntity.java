@@ -521,7 +521,7 @@ public class SoulRingEntity extends Entity {
         // ===== 数据回滚：移除刚吸收的魂环 =====
         data.setRingAge(slot - 1, 0);      // 年限归零 = 该环消失（回到瓶颈封顶，可继续猎杀魂兽）
         data.unmarkRerolled(slot);         // 该环位消耗的重刷机会一并退还
-        data.setMaxSpiritPower(SoulGrowth.maxSpiritPower(data)); // 上限随环减少重算，魂力值保持现状
+        data.setMaxSoulPower(SoulGrowth.maxSoulPower(data)); // 上限随环减少重算，魂力值保持现状
         // 该环位抽得的签名机制一并解绑（下次吸收重新抽签）
         PlayerSkillDataStore.get(serverPlayer.serverLevel()).unbindMechanism(serverPlayer, slot);
         SoulGrowth.applyHealth(serverPlayer);

@@ -19,7 +19,7 @@ import net.minecraft.network.chat.Component;
 public final class TitleSystem {
     /** 封号斗罗最低等级（可自定义封号） */
     public static final int FENG_HAO_LEVEL = 91;
-    /** 魂帝最低等级（61 级起解锁精神力飞行） */
+    /** 魂帝最低等级（61 级起解锁魂力飞行） */
     public static final int SOUL_EMPEROR_LEVEL = 61;
     /** 超级斗罗最低等级 */
     public static final int CHAO_JI_LEVEL = 95;

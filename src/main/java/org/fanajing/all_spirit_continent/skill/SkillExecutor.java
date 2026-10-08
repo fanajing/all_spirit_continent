@@ -28,6 +28,7 @@ import net.minecraft.world.phys.Vec3;
 import org.fanajing.all_spirit_continent.init.ModAttachments;
 import org.fanajing.all_spirit_continent.skill.SkillData.ExecutionStep;
 import org.fanajing.all_spirit_continent.util.PlayerLevelData;
+import org.fanajing.all_spirit_continent.util.SoulGrowth;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -43,7 +44,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * <p>
  * 解析 SkillData.execution 中的动作原语序列，逐条映射到 Minecraft 机制：
  * 伤害/药水效果/位移/爆炸/粒子/音效/实体召唤/方块操作等。
- * 集中处理：技能冷却（服务端内存记录）、精神力消耗（PlayerLevelData）、
+ * 集中处理：技能冷却（服务端内存记录）、魂力消耗（PlayerLevelData）、
  * 目标解析（SELF / TARGET=准星实体）、数值平衡常量。
  */
 public class SkillExecutor {
@@ -58,7 +59,7 @@ public class SkillExecutor {
         SUCCESS,
         /** 冷却中 */
         COOLDOWN,
-        /** 精神力不足 */
+        /** 魂力不足 */
         NO_SPIRIT,
         /** 未开武魂（无魂环） */
         NO_WUHUN,
@@ -72,7 +73,7 @@ public class SkillExecutor {
     // ===== 主入口 =====
 
     /**
-     * 尝试释放魂技：武魂校验（有魂环）→ 冷却校验 → 精神力消耗 → 执行原语序列。
+     * 尝试释放魂技：武魂校验（有魂环）→ 冷却校验 → 魂力消耗 → 执行原语序列。
      *
      * @return 释放结果（调用方据此给玩家提示）
      */
@@ -91,12 +92,12 @@ public class SkillExecutor {
             return CastResult.COOLDOWN;
         }
 
-        // 精神力消耗
-        float cost = estimatedCost(skill);
-        if (data.getSpiritPower() < cost) {
+        // 魂力消耗
+        float cost = estimatedCost(skill, data);
+        if (data.getSoulPower() < cost) {
             return CastResult.NO_SPIRIT;
         }
-        data.consumeSpiritPower(cost);
+        data.consumeSoulPower(cost);
 
         LAST_CAST_TICKS.put(castKey, now);
 
@@ -115,7 +116,7 @@ public class SkillExecutor {
 
     /**
      * 应用融合被动步骤（手持武魂时由 PassiveSkillHandler 周期性调用）。
-     * 仅执行被动白名单原语，始终作用于施法者自身，不消耗精神力、不触发冷却。
+     * 仅执行被动白名单原语，始终作用于施法者自身，不消耗魂力、不触发冷却。
      */
     public static void applyPassive(ServerPlayer caster, ExecutionStep step) {
         SkillPrimitive p = SkillPrimitive.byName(step.primitive());
@@ -127,11 +128,17 @@ public class SkillExecutor {
         }
     }
 
-    /** 估算魂技精神力消耗：原语数 × 5 + 冷却秒数 × 0.5（保底 5） */
-    public static float estimatedCost(SkillData skill) {
-        int steps = skill.execution() == null ? 0 : skill.execution().size();
-        float cost = 5f * Math.max(1, steps) + skill.cooldown() / 40f;
-        return Math.max(5f, cost);
+    /**
+     * 估算魂技魂力消耗：0.10 × 战力年限^0.85 × 复杂度。
+     * <p>
+     * 原来是「原语数 × 5 + 冷却秒数 × 0.5（保底 5）」—— 一个与玩家强度完全脱钩的常数。
+     * 配合旧的魂力上限（99 级约 6 万）会导致后期满池能放上千次，魂力形同虚设。
+     * 现改为随战力年限缩放，且复杂度按魂环位序递增（第 1 环 0.6 → 第 9 环 2.2），
+     * 对应原作「高阶魂技消耗剧增」。
+     */
+    public static float estimatedCost(SkillData skill, PlayerLevelData data) {
+        if (data == null) return 5f;
+        return SoulGrowth.skillCost(data, skill.ringAge());
     }
 
     // ===== 目标解析 =====

@@ -14,11 +14,12 @@ import org.fanajing.all_spirit_continent.data.PlayerSkillDataStore;
 import org.fanajing.all_spirit_continent.skill.SkillData;
 import org.fanajing.all_spirit_continent.skill.SkillExecutor;
 import org.fanajing.all_spirit_continent.util.PlayerSkillConfig;
+import org.fanajing.all_spirit_continent.util.SoulPressure;
 
 /**
  * 客户端 → 服务端：开武魂状态下按技能释放键（默认 R）释放指定魂环位的魂技。
  * <p>
- * 服务端权威执行：读取绑定环位的 SkillData → 冷却/精神力/武魂校验 → SkillExecutor 原语执行。
+ * 服务端权威执行：读取绑定环位的 SkillData → 冷却/魂力/武魂校验 → SkillExecutor 原语执行。
  * 若指定环位无技能，自动回退到第一个已绑定技能的环位并提示。
  */
 public record CastSkillPayload(int slot) implements CustomPacketPayload {
@@ -41,6 +42,15 @@ public record CastSkillPayload(int slot) implements CustomPacketPayload {
     public static void handleServer(final CastSkillPayload payload, final IPayloadContext context) {
         context.enqueueWork(() -> {
             if (!(context.player() instanceof ServerPlayer sp)) return;
+
+            // 恐惧档威压：被高年限魂兽压制时无法凝聚魂力，任何魂技都放不出来
+            if (SoulPressure.isFearbound(sp)) {
+                sp.sendSystemMessage(Component
+                        .translatable("msg.all_spirit_continent.skill_fearbound")
+                        .withStyle(ChatFormatting.DARK_RED));
+                return;
+            }
+
             PlayerSkillConfig cfg = PlayerSkillDataStore.get(sp.serverLevel()).config(sp);
 
             // 解析环位：指定环无技能 → 自动回退第一个已绑定环位
@@ -59,7 +69,7 @@ public record CastSkillPayload(int slot) implements CustomPacketPayload {
                         .withStyle(ChatFormatting.YELLOW));
             }
 
-            // 武魂校验 / 冷却 / 精神力由执行引擎统一处理
+            // 武魂校验 / 冷却 / 魂力由执行引擎统一处理
             switch (SkillExecutor.tryCast(sp, data)) {
                 case COOLDOWN -> sp.sendSystemMessage(Component
                         .translatable("msg.all_spirit_continent.skill_cooldown")

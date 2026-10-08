@@ -432,7 +432,12 @@ public final class SkillGenerator {
     static String buildSystemPrompt(int slot, SignatureMechanism mechanism) {
         RingPositionRules.RuleSpec rule = RingPositionRules.forSlot(slot);
         StringBuilder sb = new StringBuilder();
-        sb.append("你是斗罗大陆世界观下的魂技设计大师，当前运行在「魂技生成引擎」的严格约束模式下，");
+        sb.append("【世界观设定】斗罗大陆位面降临到了 Minecraft（我的世界）：天地灵气涌入这方方块大陆，")
+          .append("Minecraft 的原生生物在灵气浸染下发生变异，成为拥有「年限」之力的魂兽")
+          .append("（十年、百年、千年、万年、十万年、百万年……年限越高越强横，恐怖如斯）。")
+          .append("玩家在大陆降临之时觉醒「武魂」，从此踏上魂师之路：猎杀魂兽、吸收魂环、领悟魂技，")
+          .append("一步一步以九环成神为目标修行。\n\n");
+        sb.append("你是这方大陆的魂技设计大师，当前运行在「魂技生成引擎」的严格约束模式下，");
         sb.append("为第 ").append(slot).append(" 环位（").append(rule.tierName()).append("）生成魂技。\n");
         sb.append("必须严格输出一个 JSON 对象，格式：\n");
         sb.append("{\"name\":\"技能名\",\"description\":\"不超过30字的描述\",\"cooldown\":<int>,")
@@ -462,10 +467,15 @@ public final class SkillGenerator {
           .append(mechanismDirective(mechanism)).append('\n');
         sb.append("5. signature_mechanism 字段必须填 \"").append(mechanism.code).append("\"。\n\n");
 
-        sb.append("二、创意要求：\n");
-        sb.append("- 主题契合：技能名与机制必须体现武魂与魂兽的标志性特征。\n");
-        sb.append("- 机制联动：多步骤必须构成战斗连招（先控制/减益→再爆发；先增益→再突进），禁止互不相干的数值堆叠。\n");
-        sb.append("- 表现步骤（PARTICLE/SOUND）至多 1 个，不可喧宾夺主。\n\n");
+        sb.append("二、创意要求（魂技设计优先级，从高到低，不可倒置）：\n");
+        sb.append("1.【魂兽特征最优先】魂技的核心机制必须来自魂兽本身——即这只 Minecraft 生物变异后的招牌能力。")
+          .append("从原版生物的本能与特征出发设计（例：苦力怕=自爆冲击、末影人=瞬移与凝视、恶魂=火球轰击、")
+          .append("女巫=喷洒药水、凋灵=头颅弹幕与凋零、守卫者=激光射线、烈焰人=火焰齐射），")
+          .append("把它变异后的标志性能力做成魂技的核心步骤。\n");
+        sb.append("2.【武魂气质其次】技能名称与表现形式须体现玩家武魂的特色（武魂决定魂技的施展形式与命名风格，")
+          .append("如昊天锤=沉重霸道的锤击），但武魂只负责包装与命名，不得替代魂兽特征成为核心机制。\n");
+        sb.append("3.【机制联动】多步骤必须构成战斗连招（先控制/减益→再爆发；先增益→再突进），禁止互不相干的数值堆叠。\n");
+        sb.append("4.【表现克制】表现步骤（PARTICLE/SOUND）至多 1 个，不可喧宾夺主。\n\n");
 
         sb.append("三、target 规则（写错会伤到自己）：伤害/减益/控制类原语 target 必须为 TARGET；")
           .append("增益/治疗/防御/位移类原语 target 为 SELF（治疗队友可用 TARGET）；")
@@ -501,7 +511,8 @@ public final class SkillGenerator {
      */
     static String buildUserPrompt(Request req, ScoringContext ctx, String direction, long randomSeed) {
         StringBuilder sb = new StringBuilder();
-        sb.append("请为以下组合设计 1 个魂技。\n");
+        sb.append("请为以下组合设计 1 个魂技（设计主旨：第一优先提炼魂兽变异后的招牌能力作为技能核心，")
+          .append("第二优先用武魂气质包装技能名与表现形式，勿倒置）。\n");
         sb.append("武魂: ").append(req.wuhun()).append('\n');
         sb.append("魂兽: ").append(ApiClient.describeMobForAi(req.mobId())).append('\n');
         sb.append("魂环年限: ").append(req.ringAge()).append(" 年");

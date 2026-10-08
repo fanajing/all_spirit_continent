@@ -8,7 +8,7 @@ import org.fanajing.all_spirit_continent.util.PlayerSkillConfig;
 
 /**
  * 融合被动处理器：武魂身份激活且手持武魂武器（主手非空）时，
- * 周期刷新所有已绑定魂技的 passive 效果（纯 buff，不消耗精神力、无冷却）。
+ * 周期刷新所有已绑定魂技的 passive 效果（纯 buff，不消耗魂力、无冷却）。
  * <p>
  * 设计思路：被动的本质 = 手持武魂时由系统持续施加增益效果。
  * 每 {@link #REFRESH_INTERVAL} tick 统一刷新一次，效果 duration（默认 200 tick）

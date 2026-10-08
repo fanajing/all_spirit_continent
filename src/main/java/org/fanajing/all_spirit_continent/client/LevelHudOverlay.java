@@ -133,10 +133,10 @@ public class LevelHudOverlay {
                 labelColor, 0xFFAA00);
         y += LINE_SPACING;
 
-        // 精神力 - 自定义（上限随等级与魂环年限成长）
+        // 魂力 - 自定义（上限随等级与魂环年限成长）
         drawStatLine(guiGraphics, mc, textX, y,
                 "hud.all_spirit_continent.spirit",
-                formatBig(data.getSpiritPower()) + "/" + formatBig(data.getMaxSpiritPower()),
+                formatBig(data.getSoulPower()) + "/" + formatBig(data.getMaxSoulPower()),
                 labelColor, 0x55AAFF);
         y += LINE_SPACING;
 

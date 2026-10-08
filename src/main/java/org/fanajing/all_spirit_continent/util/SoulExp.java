@@ -11,8 +11,7 @@ import org.fanajing.all_spirit_continent.init.ModAttachments;
 
 /**
  * 经验系统（公共工具类，服务端使用）：
- *  - 升级所需经验 expRequired(level) = 100 × level^1.8（1 级升 2 级 100，99 级约 39 万；
- *    指数高于魂兽经验曲线，越后期每级所需越多，长期玩法）
+ *  - 升级所需经验 expRequired(level)：查表 XP_TABLE（98 项，由战力模型反解生成，命中 60 小时毕业）
  *  - 魂环基础经验 baseExp(age) = 10 × 年限^0.8（与魂兽血攻曲线 statMultiplierOf 同指数；
  *    十年≈63 / 百年≈398 / 千年≈2512 / 万年≈15849 / 十万年≈10万 / 百万年≈63万）
  *  - 越级惩罚：玩家等级档位（level/10，封顶 5 = 百万年）高于魂兽年限档位时，每高一档经验 ×0.8
@@ -31,9 +30,46 @@ public final class SoulExp {
     /** 单次吸收最多连续升级数（超过部分经验作废，防止低等级玩家抱大腿刷百万年直升几十级） */
     public static final int MAX_LEVELUPS_PER_ABSORB = 5;
 
-    /** 升级所需经验（当前等级 → 下一级） */
+    /**
+     * 单次击杀/吸收的经验软上限（倍率 × 当前级升级所需）。
+     * 没有它时 95 级击杀一只千万年魂兽可直接连升 3.25 级，RNG 好的玩家能比别人快一倍——
+     * 这是结构性方差，不是技术差距。2.0 表示单次最多抵两级。
+     */
+    public static final double MAX_EXP_PER_KILL_RATIO = 2.0;
+
+    /**
+     * L 级升 L+1 级所需经验，下标 0 = 1 级（共 98 项，覆盖 1→99）。
+     * <p>
+     * 由 `tools/exp_curve_model.py` 按「每段目标时长 ÷ 该级实际经验产出」逐级反解生成，
+     * 收敛误差 0.000%，总时长命中 60.4 小时。**不要手改** —— 改参数后重跑脚本刷新全表。
+     * 用查表而非公式的原因：产出在跨阈值时会阶跃（9 级能打百年，经验/小时一夜跳 4.7 倍），
+     * 任何平滑公式都会算出「8 级 5 分钟、9 级 1 分钟」的倒挂节奏。
+     */
+    private static final long[] XP_TABLE = {
+            379L, 383L, 386L, 390L, 393L, 396L, 399L,
+            402L, 405L, 735L, 740L, 744L, 748L, 751L,
+            755L, 758L, 761L, 2783L, 2816L, 4784L, 4825L,
+            4863L, 4900L, 4934L, 4965L, 4995L, 5022L, 5047L,
+            5070L, 7643L, 7671L, 7696L, 7720L, 7741L, 23066L,
+            23224L, 23368L, 23500L, 23621L, 39659L, 39805L, 39940L,
+            40065L, 40179L, 40283L, 40379L, 40466L, 40545L, 40617L,
+            52901L, 52975L, 53043L, 682106L, 691383L, 699991L, 707954L,
+            715300L, 722059L, 728264L, 906597L, 912365L, 917689L, 922588L,
+            927085L, 931204L, 934969L, 938403L, 941531L, 944375L, 1184135L,
+            4913578L, 4958119L, 4999088L, 5036682L, 5071104L, 5102560L, 5131253L,
+            5157384L, 5181146L, 5731779L, 5751574L, 5769681L, 5786211L, 5801274L,
+            5814979L, 5827428L, 5838723L, 25821743L, 26003309L, 29430090L, 29443737L,
+            29515554L, 29632329L, 29740448L, 29840236L, 29932070L, 30016365L, 30093556L,
+    };
+
+    /**
+     * 升级所需经验（当前等级 → 下一级）。
+     * 99 级（极限斗罗）已封顶，返回 int 上限表示不再需要经验。
+     */
     public static int expRequired(int level) {
-        return (int) Math.round(100 * Math.pow(level, 1.8));
+        if (level < 1) return 0;
+        if (level > XP_TABLE.length) return Integer.MAX_VALUE;
+        return (int) XP_TABLE[level - 1];
     }
 
     /** 等级是否处于节点（10/20/.../90）：节点等级未获得对应魂环时封顶，溢出经验作废 */
@@ -75,7 +111,7 @@ public final class SoulExp {
 
     /**
      * 给玩家加经验并处理连续升级（服务端，吸收魂环后调用）。
-     * 升级时：重算血量/攻击力并回满血（setLevel 已回满精神力）、授予等级成就（95/99）、
+     * 升级时：重算血量/攻击力并回满血（setLevel 已回满魂力）、授予等级成就（95/99）、
      * 播放升级音效与脚底粒子、聊天提示新等级。
      * 节点等级（10/20/.../90）未获得对应魂环时封顶：吸收的经验全部作废；
      * 升级途中到达节点等级立即停止，溢出经验全部作废。
@@ -83,7 +119,7 @@ public final class SoulExp {
      * 单次吸收连升达到 MAX_LEVELUPS_PER_ABSORB 级后，剩余经验全部作废。
      * 返回是否发生了升级。
      */
-    public static boolean gainExp(Level level, ServerPlayer player, int gained) {
+    public static boolean gainExp(Level level, ServerPlayer player, int rawGained) {
         PlayerLevelData data = player.getData(ModAttachments.PLAYER_LEVEL_DATA.get());
 
         // 瓶颈封顶中（节点等级未获得对应魂环）：经验全部作废
@@ -94,6 +130,9 @@ public final class SoulExp {
             return false;
         }
 
+        // 单次经验软上限：95 级杀一只千万年可抵 3.25 级，这里压到最多 2 级，
+        // 把「一次好运」的收益封顶，避免 RNG 造成的结构性进度方差
+        int gained = (int) Math.min(rawGained, MAX_EXP_PER_KILL_RATIO * expRequired(data.getLevel()));
         data.addExp(gained);
 
         boolean leveled = false;
@@ -169,8 +208,8 @@ public final class SoulExp {
             data.setRingAge(ringIndex, age);
         }
 
-        // 精神力上限按新环加成重算（获得更高年限魂环后回满）
-        data.refreshSpiritPower();
+        // 魂力上限按新环加成重算（获得更高年限魂环后回满）
+        data.refreshSoulPower();
 
         // 成就：获得第 N 个魂环 → 对应境界成就（魂师=第1环 … 封号斗罗=第9环）
         ModAdvancements.awardRing(player, ringIndex + 1);

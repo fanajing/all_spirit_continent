@@ -15,6 +15,7 @@ import net.minecraft.world.entity.ai.attributes.AttributeInstance;
 import net.minecraft.world.entity.ai.attributes.AttributeModifier;
 import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.level.Level;
 import net.minecraft.world.level.levelgen.Heightmap;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
@@ -57,6 +58,9 @@ public class SoulBeastSpawnHandler {
 
     /** 出生点新手保护半径（格）：范围内不生成十万年及以上魂兽 */
     public static final double SPAWN_PROTECT_RANGE = 5000.0;
+
+    /** 主世界「深层」判定高度：低于此 Y 视为玩家主动深入，解除千年/万年门控 */
+    public static final double DEEP_Y = 48.0;
 
     /** 属性修饰 ID */
     private static final ResourceLocation SCALE_MOD_ID =
@@ -132,7 +136,16 @@ public class SoulBeastSpawnHandler {
         boolean hostile = mob.getAttribute(Attributes.ATTACK_DAMAGE) != null;
         boolean nearSpawn = isNearSpawn(level, mob.blockPosition());
 
-        int age = SoulBeastAge.rollAge(level.random, hostile, nearSpawn);
+        // 主世界高阶门控：千年/万年只在「远离出生点 / 深层 / 夜晚」生成。
+        // 三者都是玩家主动承担风险的行为；出生点附近的地表白天保持十年/百年，
+        // 新手不会在毫无察觉的情况下撞上致命魂兽（详见 SoulBeastAge.SAFE_TABLE 注释）。
+        // 地狱/末地本身即高阶维度，不受此限制。
+        boolean allowHighTier = level.dimension() != Level.OVERWORLD
+                || !nearSpawn
+                || mob.getY() < DEEP_Y
+                || level.isNight();
+
+        int age = SoulBeastAge.rollAge(level.random, hostile, nearSpawn, allowHighTier);
 
         // 百万年魂兽：全世界最多 2 只且冷却期内不生成，超限降级为十万年档
         if (SoulBeastAge.isMillion(age)) {
@@ -204,7 +217,7 @@ public class SoulBeastSpawnHandler {
         if (attackAttr != null) {
             attackAttr.removeModifier(ATTACK_MOD_ID);
             attackAttr.addPermanentModifier(new AttributeModifier(ATTACK_MOD_ID,
-                    SoulBeastAge.statMultiplierOf(age) - 1.0, AttributeModifier.Operation.ADD_MULTIPLIED_TOTAL));
+                    SoulBeastAge.attackMultiplierOf(age) - 1.0, AttributeModifier.Operation.ADD_MULTIPLIED_TOTAL));
         }
 
         // 生命值：年限越高血越厚（乘算倍数，基于生物原本生命值）；应用后回满血
@@ -212,12 +225,14 @@ public class SoulBeastSpawnHandler {
         if (healthAttr != null) {
             healthAttr.removeModifier(HEALTH_MOD_ID);
             healthAttr.addPermanentModifier(new AttributeModifier(HEALTH_MOD_ID,
-                    SoulBeastAge.statMultiplierOf(age) - 1.0, AttributeModifier.Operation.ADD_MULTIPLIED_TOTAL));
+                    SoulBeastAge.healthMultiplierOf(age) - 1.0, AttributeModifier.Operation.ADD_MULTIPLIED_TOTAL));
             mob.setHealth(mob.getMaxHealth());
         }
 
-        LOGGER.info("[SoulBeast-apply] {} age={} mult={} attack={} maxHealth={}",
-                mob.getType(), age, String.format("%.1f", SoulBeastAge.statMultiplierOf(age)),
+        LOGGER.info("[SoulBeast-apply] {} age={} hpMult={} atkMult={} attack={} maxHealth={}",
+                mob.getType(), age,
+                String.format("%.1f", SoulBeastAge.healthMultiplierOf(age)),
+                String.format("%.1f", SoulBeastAge.attackMultiplierOf(age)),
                 attackAttr == null ? "N/A" : String.format("%.1f", attackAttr.getValue()),
                 String.format("%.1f", mob.getMaxHealth()));
     }

@@ -207,7 +207,7 @@ public final class MartialSoulInventoryHandler {
         PlayerLevelData data = player.getData(ModAttachments.PLAYER_LEVEL_DATA.get());
         CompoundTag tag = new CompoundTag();
         if (data != null) {
-            tag.putFloat("Attack", Math.max(1f, SoulGrowth.ringsAttackBonus(data)));
+            tag.putFloat("Attack", Math.max(1f, SoulGrowth.attackBonus(data)));
             tag.putInt("Level", data.getLevel());
             String title = data.getTitle();
             if (title != null && !title.isEmpty()) {
@@ -252,7 +252,7 @@ public final class MartialSoulInventoryHandler {
 
     private static ItemAttributeModifiers buildAttackModifiers(Player player) {
         PlayerLevelData data = player.getData(ModAttachments.PLAYER_LEVEL_DATA.get());
-        float attack = data == null ? 1f : Math.max(1f, SoulGrowth.ringsAttackBonus(data));
+        float attack = data == null ? 1f : Math.max(1f, SoulGrowth.attackBonus(data));
         return new ItemAttributeModifiers(List.of(
                 new ItemAttributeModifiers.Entry(Attributes.ATTACK_DAMAGE,
                         new AttributeModifier(Item.BASE_ATTACK_DAMAGE_ID, attack, AttributeModifier.Operation.ADD_VALUE),

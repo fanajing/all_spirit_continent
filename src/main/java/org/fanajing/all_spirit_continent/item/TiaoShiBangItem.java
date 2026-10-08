@@ -271,8 +271,8 @@ public class TiaoShiBangItem extends Item {
         }
         data.setRingAge(targetIndex, nextAge);
 
-        // 重算精神力上限与血量/攻击力加成（魂环年限变化），吸收更高年限魂环后回满
-        data.refreshSpiritPower();
+        // 重算魂力上限与血量/攻击力加成（魂环年限变化），吸收更高年限魂环后回满
+        data.refreshSoulPower();
         SoulGrowth.applyHealth(player);
         SoulGrowth.applyAttack(player);
         player.setHealth(player.getMaxHealth());
@@ -366,9 +366,9 @@ public class TiaoShiBangItem extends Item {
         }
         int ringCount = data.getRingCount();
 
-        // 获得新环后重算精神力上限（含新环加成）与血量/攻击力加成，升级后回满血
+        // 获得新环后重算魂力上限（含新环加成）与血量/攻击力加成，升级后回满血
         if (ringGained) {
-            data.refreshSpiritPower();
+            data.refreshSoulPower();
         }
         SoulGrowth.applyHealth(player);
         SoulGrowth.applyAttack(player);

@@ -21,8 +21,8 @@ public class PlayerLevelData {
     private int level = 1;
     /** 当前等级内已积累的经验值（吸收魂环获得，升级时扣除所需经验） */
     private int exp = 0;
-    private float spiritPower = 100f;
-    private float maxSpiritPower = 100f;
+    private float soulPower = 100f;
+    private float maxSoulPower = 100f;
     /** 自定义封号（91级后可 /fh 设置，最多2个字，空=未设置） */
     private String title = "";
     /** 每环年限（年，index = 环序号，0 = 无环占位；十年=10、百年=100…百万年=1000000，支持非整数级年限如 6070） */
@@ -38,8 +38,12 @@ public class PlayerLevelData {
                     Codec.BOOL.fieldOf("activated").forGetter(d -> d.activated),
                     Codec.INT.fieldOf("level").forGetter(d -> d.level),
                     Codec.INT.optionalFieldOf("exp", 0).forGetter(d -> d.exp),
-                    Codec.FLOAT.fieldOf("spiritPower").forGetter(d -> d.spiritPower),
-                    Codec.FLOAT.fieldOf("maxSpiritPower").forGetter(d -> d.maxSpiritPower),
+                    // 魂力字段用 optional + 哨兵值 -1：术语从「精神力」改名为「魂力」后，
+                    // 旧存档的 spiritPower 键读不到。若用 fieldOf，缺失会导致整个 PlayerLevelData
+                    // 反序列化失败 —— 玩家等级与全部魂环一并丢失。改为 optional 后旧档最多丢当前魂力值，
+                    // 由构造函数兜底回满（远小于丢档的代价）。
+                    Codec.FLOAT.optionalFieldOf("soulPower", -1f).forGetter(d -> d.soulPower),
+                    Codec.FLOAT.optionalFieldOf("maxSoulPower", -1f).forGetter(d -> d.maxSoulPower),
                     Codec.STRING.optionalFieldOf("title", "").forGetter(d -> d.title),
                     Codec.INT.listOf().optionalFieldOf("ringAges", List.of()).forGetter(d -> d.ringAges),
                     Codec.INT.listOf().optionalFieldOf("rerolledRings", List.of()).forGetter(d -> List.copyOf(d.rerolledRings)),
@@ -54,8 +58,8 @@ public class PlayerLevelData {
                         buf.writeBoolean(data.activated);
                         buf.writeInt(data.level);
                         buf.writeInt(data.exp);
-                        buf.writeFloat(data.spiritPower);
-                        buf.writeFloat(data.maxSpiritPower);
+                        buf.writeFloat(data.soulPower);
+                        buf.writeFloat(data.maxSoulPower);
                         buf.writeUtf(data.title);
                         for (int i = 0; i < SoulRingLayout.MAX_RINGS; i++) {
                             buf.writeVarInt(data.getRingAge(i));
@@ -86,8 +90,8 @@ public class PlayerLevelData {
         this.rerolledRings = new HashSet<>();
     }
 
-    /** 全参构造（Codec 反序列化）：旧档位（0~5）自动迁移为具体年限；精神力上限按成长公式重算 */
-    public PlayerLevelData(boolean activated, int level, int exp, float spiritPower, float maxSpiritPower,
+    /** 全参构造（Codec 反序列化）：旧档位（0~5）自动迁移为具体年限；魂力上限按成长公式重算 */
+    public PlayerLevelData(boolean activated, int level, int exp, float soulPower, float maxSoulPower,
                            String title, List<Integer> ringAges, List<Integer> rerolledRings, boolean martialSoulOpen) {
         this.activated = activated;
         this.level = level;
@@ -99,10 +103,11 @@ public class PlayerLevelData {
             this.ringAges.add(migrateRingAge(age));
         }
         this.rerolledRings = new HashSet<>(rerolledRings == null ? List.of() : rerolledRings);
-        // 精神力上限按成长公式重算（旧存档的固定值被覆盖，保证新成长公式生效）；
-        // maxSpiritPower 参数仅用于保持 Codec 格式兼容
-        this.maxSpiritPower = SoulGrowth.maxSpiritPower(this);
-        this.spiritPower = Math.min(spiritPower, this.maxSpiritPower);
+        // 魂力上限按成长公式重算（旧存档的固定值被覆盖，保证新成长公式生效）；
+        // maxSoulPower 参数仅用于保持 Codec 格式兼容
+        this.maxSoulPower = SoulGrowth.maxSoulPower(this);
+        // soulPower < 0 = 哨兵值（旧存档无 soulPower 键 / 全新玩家）→ 回满；否则夹到上限内
+        this.soulPower = soulPower < 0 ? this.maxSoulPower : Math.min(soulPower, this.maxSoulPower);
     }
 
     /** 旧存档档位（0=十年…5=百万年）→ 具体年限；0（无环占位）与 10+（新格式）保持不变 */
@@ -134,10 +139,10 @@ public class PlayerLevelData {
         return level;
     }
 
-    /** 设置等级并重算精神力：上限按成长公式（等级成长 + 已获魂环年限加成），等级变化时精神力回满 */
+    /** 设置等级并重算魂力：上限按成长公式（等级成长 + 已获魂环年限加成），等级变化时魂力回满 */
     public void setLevel(int level) {
         this.level = level;
-        refreshSpiritPower();
+        refreshSoulPower();
     }
 
     /**
@@ -153,16 +158,16 @@ public class PlayerLevelData {
         return count;
     }
 
-    /** 重算精神力上限并按当前等级回满（魂环年限变化后也要调用） */
-    public void refreshSpiritPower() {
-        this.maxSpiritPower = SoulGrowth.maxSpiritPower(this);
-        this.spiritPower = this.maxSpiritPower;
+    /** 重算魂力上限并按当前等级回满（魂环年限变化后也要调用） */
+    public void refreshSoulPower() {
+        this.maxSoulPower = SoulGrowth.maxSoulPower(this);
+        this.soulPower = this.maxSoulPower;
     }
 
-    /** 升级并回复精神力 */
+    /** 升级并回复魂力 */
     public void levelUp() {
         this.level++;
-        this.spiritPower = this.maxSpiritPower;
+        this.soulPower = this.maxSoulPower;
     }
 
     // ----- 经验 -----
@@ -179,29 +184,29 @@ public class PlayerLevelData {
         this.exp = Math.max(0, this.exp + amount);
     }
 
-    // ----- 精神力（魔法值）-----
-    public float getSpiritPower() {
-        return spiritPower;
+    // ----- 魂力（魔法值）-----
+    public float getSoulPower() {
+        return soulPower;
     }
-    public void setSpiritPower(float spiritPower) {
-        this.spiritPower = Math.max(0, Math.min(spiritPower, maxSpiritPower));
-    }
-
-    public float getMaxSpiritPower() {
-        return maxSpiritPower;
+    public void setSoulPower(float soulPower) {
+        this.soulPower = Math.max(0, Math.min(soulPower, maxSoulPower));
     }
 
-    public void setMaxSpiritPower(float maxSpiritPower) {
-        this.maxSpiritPower = maxSpiritPower;
-        this.spiritPower = Math.min(this.spiritPower, this.maxSpiritPower);
+    public float getMaxSoulPower() {
+        return maxSoulPower;
     }
 
-    public void consumeSpiritPower(float amount) {
-        this.spiritPower = Math.max(0, this.spiritPower - amount);
+    public void setMaxSoulPower(float maxSoulPower) {
+        this.maxSoulPower = maxSoulPower;
+        this.soulPower = Math.min(this.soulPower, this.maxSoulPower);
     }
 
-    public void restoreSpiritPower(float amount) {
-        this.spiritPower = Math.min(this.maxSpiritPower, this.spiritPower + amount);
+    public void consumeSoulPower(float amount) {
+        this.soulPower = Math.max(0, this.soulPower - amount);
+    }
+
+    public void restoreSoulPower(float amount) {
+        this.soulPower = Math.min(this.maxSoulPower, this.soulPower + amount);
     }
 
     // ----- 自定义封号（称号） -----
@@ -273,8 +278,8 @@ public class PlayerLevelData {
         this.activated = other.activated;
         this.level = other.level;
         this.exp = other.exp;
-        this.spiritPower = other.spiritPower;
-        this.maxSpiritPower = other.maxSpiritPower;
+        this.soulPower = other.soulPower;
+        this.maxSoulPower = other.maxSoulPower;
         this.title = other.title;
         this.ringAges = new ArrayList<>(other.ringAges);
         this.rerolledRings.clear();
@@ -288,8 +293,8 @@ public class PlayerLevelData {
         this.activated = false;
         this.level = 1;
         this.exp = 0;
-        this.spiritPower = 100f;
-        this.maxSpiritPower = 100f;
+        this.soulPower = 100f;
+        this.maxSoulPower = 100f;
         this.title = "";
         this.ringAges = new ArrayList<>(Collections.nCopies(SoulRingLayout.MAX_RINGS, 0));
         this.rerolledRings.clear();

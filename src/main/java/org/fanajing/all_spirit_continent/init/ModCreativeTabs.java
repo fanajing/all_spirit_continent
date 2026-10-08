@@ -17,7 +17,7 @@ public class ModCreativeTabs {
             DeferredRegister.create(Registries.CREATIVE_MODE_TAB, All_spirit_continent.MODID);
 
     // ===== 全魂大陆主创造标签页 =====
-    public static final DeferredHolder<CreativeModeTab, CreativeModeTab> ALL_SPIRIT_CONTINENT_TAB =
+    public static final DeferredHolder<CreativeModeTab, CreativeModeTab> ALL_SOUL_POWER_CONTINENT_TAB =
             CREATIVE_MODE_TABS.register("all_spirit_continent_tab",
                     () -> CreativeModeTab.builder()
                             .title(Component.translatable("itemGroup.all_spirit_continent"))

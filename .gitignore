@@ -11,6 +11,15 @@ run/
 .idea/
 .vscode/
 *.iml
+.eclipse/
+
+# ===== AI 助手本地工作区（记忆/日志，勿提交）=====
+.workbuddy/
+
+# ===== 本地开发工具与临时产物 =====
+bin/
+tools/
+config/
 
 # ===== 临时/日志文件 =====
 tmp_ap_check.txt
@@ -31,3 +40,5 @@ generated-images/
 /魂技生成引擎.txt
 /新开发文档.txt
 /制作目录.md
+/战力数值设计.md
+/经验曲线数值设计.md

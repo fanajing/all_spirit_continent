@@ -255,7 +255,7 @@ public class ApiClient {
                 + "魂环年限: " + ringAge + " 年"
                 + (sourceMaxHealth > 0 ? "（该年限魂兽最大生命约 " + (long) sourceMaxHealth + " 点）" : "")
                 + "\n"
-                + "要求: 结合魂兽的标志性机制设计有创意的联动魂技，技能名称体现武魂与魂兽特征，直接按格式输出 JSON。");
+                + "要求: 优先提炼这只变异生物（魂兽）的招牌能力作为技能核心，再以武魂气质包装技能名与表现形式，直接按格式输出 JSON。");
         messages.add(user);
         return messages;
     }
@@ -381,18 +381,25 @@ public class ApiClient {
 
     private static String buildSystemPrompt() {
         StringBuilder sb = new StringBuilder();
-        sb.append("你是斗罗大陆世界观下的魂技设计大师。为指定 (武魂+魂兽+魂环年限) 组合生成魂技。\n");
+        sb.append("【世界观设定】斗罗大陆位面降临到了 Minecraft（我的世界）：天地灵气涌入这方方块大陆，")
+          .append("Minecraft 的原生生物在灵气浸染下发生变异，成为拥有「年限」之力的魂兽（年限越高越强横）。")
+          .append("玩家在大陆降临之时觉醒「武魂」，从此踏上魂师之路：猎杀魂兽、吸收魂环、领悟魂技。\n");
+        sb.append("你是这方大陆的魂技设计大师。为指定 (武魂+魂兽+魂环年限) 组合生成魂技。\n");
         sb.append("必须严格输出 JSON 对象，格式如下：\n");
         sb.append("{\"name\":\"技能名\",\"description\":\"技能描述\",\"cooldown\":20,\"trigger\":\"RIGHT_CLICK\",\"execution\":[{\"primitive\":\"AOE_DAMAGE\",\"target\":\"TARGET\",\"radius\":3.0,\"value\":5.0}],\"passive\":[{\"primitive\":\"BUFF_STATS\",\"target\":\"SELF\",\"attribute\":\"ATTACK_DAMAGE\",\"percent\":0.3,\"duration\":200}]}\n");
         sb.append("要求：\n");
-        sb.append("0. 创意设计（比格式更重要，禁止平庸输出）：\n");
-        sb.append("   - 主题契合：研究魂兽的标志性招式与世界观，把它的招牌机制变成魂技核心（例：巫妖王=灵魂操控+亡灵统御+冰霜；冰龙=龙息+冰封；凤凰=涅槃+灼烧；蜘蛛女皇=织网+毒液+产卵）。\n");
+        sb.append("0. 创意设计（比格式更重要，禁止平庸输出；设计优先级从高到低，不可倒置）：\n");
+        sb.append("   - 【魂兽特征最优先】魂技核心机制必须来自魂兽本身——即这只 Minecraft 生物变异后的招牌能力。")
+        .append("从原版生物的本能与特征出发（例：苦力怕=自爆冲击、末影人=瞬移与凝视、恶魂=火球轰击、女巫=喷洒药水、")
+        .append("凋灵=头颅弹幕与凋零、守卫者=激光射线、烈焰人=火焰齐射），把它的标志性能力做成魂技核心。\n");
+        sb.append("   - 【武魂气质其次】技能名与表现形式体现武魂特色（武魂决定施展形式与命名风格），")
+        .append("但武魂只负责包装与命名，不得替代魂兽特征成为核心机制。\n");
         sb.append("   - 机制联动：execution 的多步骤必须构成战斗连招（例：先减速定身→再爆发；先施虚弱→再斩杀；先召唤仆从→再自身强化），禁止各步骤互不相干的数值堆叠。\n");
         sb.append("   - 战斗定位：明确本技能是 爆发/控场/斩杀/续航/召唤/防御 中的哪一两类，按定位选原语。\n");
         sb.append("   - 视觉表现：可用 PARTICLE/SOUND 提升打击感，但至多 1 个表现步骤，不可喧宾夺主。\n");
         sb.append("   - 禁止裸堆叠：禁止只输出\"一个范围伤害+一个减速\"式的最小组合，至少体现一次机制联动或主题特征。\n");
         sb.append("   - 融合被动：每个魂技可带可选 passive 数组（手持武魂武器时由系统持续施加，常驻生效，属于\"融合被动\"）。passive 只能使用被动白名单原语（见要求2末），target 必须为 SELF，禁止伤害/控制/召唤类原语混入。\n");
-        sb.append("1. 技能名体现武魂与魂兽特征；description 不超过 30 字。\n");
+        sb.append("1. 技能名以武魂气质包装魂兽特征（魂兽能力为核心、武魂定风格）；description 不超过 30 字。\n");
         sb.append("2. execution 为动作原语数组，1~4 个步骤。每个步骤 primitive 必须从以下原语中选取，参数只能使用该原语允许的参数：\n");
         for (SkillPrimitive p : SkillPrimitive.values()) {
             sb.append("   - ").append(p.name());
